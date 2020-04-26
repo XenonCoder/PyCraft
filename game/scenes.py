@@ -248,7 +248,7 @@ class GameScene(Scene):
         self.dy = 0
 
         # Inventory, Managing selected Block and Inventory overlay
-        self.inventory = Inventory(0, window)
+        self.inventory = Inventory(0, window, self.hud_group, self. hud_background_group)
 
         # Convenience list of num keys.
         self.num_keys = [key._1, key._2, key._3, key._4, key._5,

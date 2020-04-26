@@ -43,28 +43,38 @@ from pyglet.media import Player
 from pyglet.window import key, mouse
 from pyglet.sprite import Sprite
 from pyglet.graphics import OrderedGroup
+from pyglet.shapes import Rectangle
 
 from .blocks import *
 from .inventory import *
 from .utilities import *
 from .graphics import BlockGroup
 from .genworld import *
-from .vertexrectangle import *
 
 
 class Inventory(object):
 
-    def __init__(self, selected_block, window):
+    def __init__(self, selected_block, window, hud_group, hud_background_group):
         """Inventory manages and draws the Inventory, contains full List of Blocks
         """
         self.selected_block = selected_block
         self.window = window
-
         self.is_inventory_open = False
+        self.hud_group = hud_group
+        self.hud_background_group = hud_background_group
+        self.hotbar_batch = pyglet.graphics.Batch()
+        self.inventory_batch = pyglet.graphics.Batch()
 
-        # Background for our Hotbar
-        self.hotbar_background = VertexRectangle(0, 0, 100, 100, (90, 101, 117, 125))
-        self.selection_indicator = VertexRectangle(0, 0, PREVIEW_SIZE, PREVIEW_SIZE, (0, 0, 0, 80))
+        # Hotbar Background
+        self.hotbar_background = Rectangle(0, 0, 100, 100, (90, 101, 117),batch=self.hotbar_batch, group=self.hud_background_group) 
+        self.hotbar_background.opacity = 125
+
+        # Inventory Background
+        self.inventory_background = Rectangle(0, 0, self.window.width, self.window.height, (90, 101, 117), batch=self.inventory_batch, group=self.hud_background_group)
+        self.inventory_background.opacity = 150
+        
+        self.selection_indicator = Rectangle(0, 0, PREVIEW_SIZE+HIGHLIGHT_PADDING, PREVIEW_SIZE+HIGHLIGHT_PADDING, (0, 0, 0)) 
+        self.selection_indicator.opacity = 75
 
         #Last known possition of mouse and hovered item
         self.mouse_x = 0
@@ -107,18 +117,18 @@ class Inventory(object):
         """Selects a new Block"""
         self.selected_block = new_block % len(self.hotbar)
 
-    def _draw_inventory_slot(self, x, y, texture):
-        """Moves the Selection Indicator and draws it above a specific texture"""
+    def _draw_inventory_slot(self, x, y, img):
+        """Moves the Selection Indicator and draws it above a specific sprite"""
         x += INVENTORY_MARGIN/2
         y += INVENTORY_MARGIN/2
         for i_x in range(int(PREVIEW_SIZE/16)):
             for i_y in range(int(PREVIEW_SIZE/16)):
-                texture.blit(x + i_x*16, y + i_y*16)
+                Sprite(img, x=x + i_x*16, y=y + i_y*16).draw()
 
-    def _draw_seletion_indicator(self, x, y):
-        """Draws the Selection Indicator """
-        self.selection_indicator.move_absolute(x+INVENTORY_MARGIN/2, y+INVENTORY_MARGIN/2)
-        self.selection_indicator.draw()
+    def _update_seletion_indicator(self, x, y):
+        """Updates the Selection Indicator """
+        self.selection_indicator.x = x++HIGHLIGHT_PADDING/2
+        self.selection_indicator.y = y++HIGHLIGHT_PADDING/2
         pass
 
     def _draw_hotbar(self, x, y):
@@ -126,51 +136,51 @@ class Inventory(object):
         size_x, size_y = self._get_hotbar_size()
 
         # Sets background in case window size changed
-        self.hotbar_background.size_absolute((size_x, size_y))
-        self.hotbar_background.draw()
+        self.hotbar_background.width = size_x
+        self.hotbar_background.height = size_y
 
         # Draws each slot in Hotbar
         for i in range(HOTBAR_SIZE):
             slot_x = ((size_x/HOTBAR_SIZE)*i)+x
             if len(self.hotbar) <= i:
-                VertexRectangle(slot_x, y, PREVIEW_SIZE, PREVIEW_SIZE, (200, 200, 200, 100))
+                empty_slot = Rectangle(slot_x, y, PREVIEW_SIZE, PREVIEW_SIZE, (200, 200, 200), batch=self.hotbar_batch, group=self.hud_group)
+                empty_slot.opacity = 100
             else:
-                self._draw_inventory_slot(slot_x, y, self.hotbar[i].get_block_texture())
+                self._draw_inventory_slot(slot_x, y, self.hotbar[i].get_block_image(), self.hotbar_batch)
             if i == self.selected_block and not self.is_inventory_open:
-                self._draw_seletion_indicator(slot_x, y)
+                self._update_seletion_indicator(slot_x, y)
             if self.is_dragging:
                 if slot_x < self.drag_x and slot_x+(size_x/HOTBAR_SIZE) > self.drag_x:
                     if y < self.drag_y and y+size_y > self.drag_y:
                         self.drag_hotbar_slot = i
                         self.is_over_hotbar = True
-                        self._draw_seletion_indicator(slot_x , y)
+                        self._update_seletion_indicator(slot_x , y)
 
-    def _draw_inventory_overlay(self, x, y):
-        # Draws background
-        VertexRectangle(0, 0, self.window.width, self.window.height, (90, 101, 117, 125, 80)).draw()
-
+    def _draw_inventory_overlay(self, x=0, y=0):
+        """Draws inventory overlay, Position can be changed with x and y
+        """
         block_count = len(self.block_list)
         size_x, size_y = self._get_hotbar_size()
         line = 0
         colum = 0
 
-        #lays out Blocks
+        #lay out Blocks
         for block in range(len(self.block_list)):
             if block-(line*HOTBAR_SIZE) >= HOTBAR_SIZE:
                 line += 1
                 colum = 0
             slot_x = ((PREVIEW_SIZE+INVENTORY_MARGIN)*colum)+x
             slot_y = line*size_y+y
-            self._draw_inventory_slot(slot_x, slot_y, self.block_list[block].get_block_texture())
+            self._draw_inventory_slot(slot_x, slot_y, self.block_list[block].get_block_image(), self.inventory_batch)
             if slot_x < self.mouse_x and slot_x+(size_x/HOTBAR_SIZE) > self.mouse_x:
                 if slot_y < self.mouse_y and slot_y+size_y > self.mouse_y:
                     self.hovered_item = block
-                    self._draw_seletion_indicator(slot_x, slot_y)
+                    self._update_seletion_indicator(slot_x, slot_y)
             colum += 1
 
     def _draw_dragged_item(self):
         if self.is_dragging and self.is_inventory_open and self.hovered_item != None:
-            self._draw_inventory_slot(self.drag_x-PREVIEW_SIZE/2, self.drag_y-PREVIEW_SIZE/2, self.block_list[self.hovered_item].get_block_texture())
+            self._draw_inventory_slot(self.drag_x-PREVIEW_SIZE/2, self.drag_y-PREVIEW_SIZE/2, self.block_list[self.hovered_item].get_block_image(), self.inventory_batch)
 
     def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
         if self.is_inventory_open and self.hovered_item != None:
@@ -217,13 +227,16 @@ class Inventory(object):
 
     def draw(self):
         # Draws Inventory
+        self.selection_indicator.draw()
         if self.is_inventory_open:
-            self._draw_inventory_overlay(0, 100)
+            self.inventory_batch.draw()
+            self._draw_inventory_overlay(y = 150)
+        self.hotbar_batch.draw()
         self._draw_hotbar(0, 0)
-        self._draw_dragged_item()
+
+        if self.is_dragging:
+            self._draw_dragged_item()
 
     def resize(self, width, height):
         # Rezizises Inventory
         pass
-
-

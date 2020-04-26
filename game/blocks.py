@@ -73,12 +73,11 @@ class Block:
         self.numeric_tex_coords = tex_coords
         self.tex_coords = _tex_coords(*tex_coords)
 
-    def get_block_texture(self):
+    def get_block_image(self):
         block_image = pyglet.resource.image('textures.png')
         block_image = block_image.get_region(
             self.numeric_tex_coords[2][0]*16,self.numeric_tex_coords[2][1]*16, 16, 16)
-        texture = block_image.get_texture()
-        return texture
+        return block_image
 
 
 DIRT = Block('dirt', ((0, 1), (0, 1), (0, 1)))

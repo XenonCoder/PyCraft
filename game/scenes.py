@@ -45,6 +45,7 @@ from pyglet.sprite import Sprite
 from pyglet.graphics import OrderedGroup
 
 from .blocks import *
+from .inventory import *
 from .utilities import *
 from .graphics import BlockGroup
 from .genworld import *
@@ -245,12 +246,8 @@ class GameScene(Scene):
         # Velocity in the y (upward) direction.
         self.dy = 0
 
-        # A list of blocks the player can place. Hit num keys to cycle.
-        self.inventory = [DIRT, DIRT_WITH_GRASS, SAND, SNOW, COBBLESTONE,
-                          BRICK_COBBLESTONE, BRICK, TREE, LEAVES, WOODEN_PLANKS]
-
-        # The current block the user can place. Hit num keys to cycle.
-        self.block = self.inventory[0]
+        # Inventory, Managing selected Block and Inventory overlay
+        self.inventory = Inventory(0, window)
 
         # Convenience list of num keys.
         self.num_keys = [key._1, key._2, key._3, key._4, key._5,
@@ -488,7 +485,7 @@ class GameScene(Scene):
             if button == mouse.RIGHT or (button == mouse.LEFT and modifiers & key.MOD_CTRL):
                 # ON OSX, control + left click = right click.
                 if previous:
-                    self.model.add_block(previous, self.block)
+                    self.model.add_block(previous, self.inventory.getSelectedBlock())
             elif button == pyglet.window.mouse.LEFT and block:
                 texture = self.model.world[block]
                 if texture != BEDSTONE:
@@ -572,8 +569,7 @@ class GameScene(Scene):
         elif symbol == key.F12:
             self._takeScreenshot()
         elif symbol in self.num_keys:
-            index = (symbol - self.num_keys[0]) % len(self.inventory)
-            self.block = self.inventory[index]
+            self.inventory.selectBlock(symbol - self.num_keys[0])
         elif symbol == key.ENTER:
             self.scene_manager.change_scene('MenuScene')
 
@@ -626,6 +622,7 @@ class GameScene(Scene):
         x, y = width // 2, height // 2
         n = 10
         self.reticle.vertices[:] = (x - n, y, x + n, y, x, y - n, x, y + n)
+        self.inventory.resize(width, height)
 
     def on_draw(self):
         """Event handler for the Window.on_draw event.
@@ -642,6 +639,7 @@ class GameScene(Scene):
         # Optionally draw some things
         if self.toggleGui:
             self.draw_focused_block()
+            self.inventory.draw()
             if self.toggleLabel:
                 self.draw_label()
 
@@ -665,7 +663,7 @@ class GameScene(Scene):
         """
         x, y, z = self.position
         self.info_label.text = 'Selected Block = %s : COORDS = [%.2f, %.2f, %.2f] : %d / %d : FPS = [%02d]' % (
-            self.block.name, 
+            self.inventory.getSelectedBlock().name, 
             x, y, z, self.model.currently_shown, len(self.model.world),
             pyglet.clock.get_fps())
         

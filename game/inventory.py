@@ -49,7 +49,7 @@ from .inventory import *
 from .utilities import *
 from .graphics import BlockGroup
 from .genworld import *
-from .vertexRectangle import *
+from .vertexrectangle import *
 
 
 class Inventory(object):
@@ -64,7 +64,7 @@ class Inventory(object):
 
         # Background for our Hotbar
         self.hotbar_background = VertexRectangle(0, 0, 100, 100, (90, 101, 117, 125))
-        self.selectionIndicator = VertexRectangle(0, 0, PREVIEW_SIZE, PREVIEW_SIZE, (0, 0, 0, 80))
+        self.selection_indicator = VertexRectangle(0, 0, PREVIEW_SIZE, PREVIEW_SIZE, (0, 0, 0, 80))
 
         #Last known possition of mouse and hovered item
         self.mouse_x = 0
@@ -72,7 +72,7 @@ class Inventory(object):
         self.drag_x = 0
         self.drag_y = 0
         self.hovered_item = None
-        self.is_draggign = False
+        self.is_dragging = False
         self.is_over_hotbar = False
         self.drag_hotbar_slot = 0
 
@@ -103,9 +103,9 @@ class Inventory(object):
         """Returns currently selected hotbar Block"""
         return self.hotbar[self.selected_block]
 
-    def select_block(self, newBlock):
+    def select_block(self, new_block):
         """Selects a new Block"""
-        self.selected_block = newBlock % len(self.hotbar)
+        self.selected_block = new_block % len(self.hotbar)
 
     def _draw_inventory_slot(self, x, y, texture):
         """Moves the Selection Indicator and draws it above a specific texture"""
@@ -117,8 +117,8 @@ class Inventory(object):
 
     def _draw_seletion_indicator(self, x, y):
         """Draws the Selection Indicator """
-        self.selectionIndicator.move_absolute(x+INVENTORY_MARGIN/2, y+INVENTORY_MARGIN/2)
-        self.selectionIndicator.draw()
+        self.selectionindicator.move_absolute(x+INVENTORY_MARGIN/2, y+INVENTORY_MARGIN/2)
+        self.selectionindicator.draw()
         pass
 
     def _draw_hotbar(self, x, y):

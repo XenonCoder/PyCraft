@@ -117,8 +117,8 @@ class Inventory(object):
 
     def _draw_seletion_indicator(self, x, y):
         """Draws the Selection Indicator """
-        self.selectionindicator.move_absolute(x+INVENTORY_MARGIN/2, y+INVENTORY_MARGIN/2)
-        self.selectionindicator.draw()
+        self.selection_indicator.move_absolute(x+INVENTORY_MARGIN/2, y+INVENTORY_MARGIN/2)
+        self.selection_indicator.draw()
         pass
 
     def _draw_hotbar(self, x, y):
@@ -138,7 +138,7 @@ class Inventory(object):
                 self._draw_inventory_slot(slot_x, y, self.hotbar[i].get_block_texture())
             if i == self.selected_block and not self.is_inventory_open:
                 self._draw_seletion_indicator(slot_x, y)
-            if self.is_draggign:
+            if self.is_dragging:
                 if slot_x < self.drag_x and slot_x+(size_x/HOTBAR_SIZE) > self.drag_x:
                     if y < self.drag_y and y+size_y > self.drag_y:
                         self.drag_hotbar_slot = i
@@ -169,18 +169,18 @@ class Inventory(object):
             colum += 1
 
     def _draw_dragged_item(self):
-        if self.is_draggign and self.is_inventory_open and self.hovered_item != None:
+        if self.is_dragging and self.is_inventory_open and self.hovered_item != None:
             self._draw_inventory_slot(self.drag_x-PREVIEW_SIZE/2, self.drag_y-PREVIEW_SIZE/2, self.block_list[self.hovered_item].get_block_texture())
 
     def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
         if self.is_inventory_open and self.hovered_item != None:
-            self.is_draggign = True
+            self.is_dragging = True
             self.drag_x = x
             self.drag_y = y
             pass
 
     def _on_drag_stop(self):
-        self.is_draggign = False
+        self.is_dragging = False
         if self.is_over_hotbar:
             self.hotbar[self.drag_hotbar_slot] = self.block_list[self.hovered_item]
             self.hovered_item = None
@@ -189,7 +189,7 @@ class Inventory(object):
         pass
 
     def update(self, dt):
-        if self.drag_x == 0 and self.drag_y == 0 and self.is_draggign:
+        if self.drag_x == 0 and self.drag_y == 0 and self.is_dragging:
             self._on_drag_stop()
         self.is_over_hotbar = False
         self.hovered_hotbar_item = 0

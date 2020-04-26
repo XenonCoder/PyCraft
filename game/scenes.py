@@ -40,6 +40,7 @@ from collections import deque
 
 from pyglet.gl import *
 from pyglet.media import Player
+from pyglet.shapes import Rectangle
 from pyglet.window import key, mouse
 from pyglet.sprite import Sprite
 from pyglet.graphics import OrderedGroup
@@ -49,7 +50,6 @@ from .inventory import *
 from .utilities import *
 from .graphics import BlockGroup
 from .genworld import *
-from .vertexrectangle import *
 
 class AudioEngine:
     """A high level audio engine for easily playing SFX and Music."""
@@ -203,7 +203,8 @@ class GameScene(Scene):
         # pyglet Groups manages setting/unsetting OpenGL state.
         self.block_group = BlockGroup(
             self.window, pyglet.resource.texture('textures.png'), order=0)
-        self.hud_group = OrderedGroup(order=1)
+        self.hud_background_group = OrderedGroup(order=1)
+        self.hud_group = OrderedGroup(order=2)
 
         # Whether or not the window exclusively captures the mouse.
         self.exclusive = False
@@ -266,10 +267,12 @@ class GameScene(Scene):
 
         # The label that is displayed in the top left of the canvas (also its background).
         # The Background gets initialized with 0 width, we update its width in draw
-        self.debug_background = VertexRectangle(0, self.window.height-INFO_LABEL_FONTSIZE - 20, 0, INFO_LABEL_FONTSIZE + 20, (45, 45, 45, 150))
         self.info_label = pyglet.text.Label('', font_name='Arial', font_size=INFO_LABEL_FONTSIZE,
                                             x=10, y=self.window.height - 10, anchor_x='left',
-                                            anchor_y='top', color=(255, 255, 255, 255), batch=self.debug_batch)
+                                            anchor_y='top', color=(255, 255, 255, 255), batch=self.debug_batch, group=self.hud_group)
+
+        self.debug_background = Rectangle(0, self.window.height-INFO_LABEL_FONTSIZE - 20, 0, INFO_LABEL_FONTSIZE + 20, color=(45, 45, 45), batch=self.debug_batch, group=self.hud_background_group) 
+        self.debug_background.opacity = 150
 
         # Boolean whether to display loading screen.
         self.initialized = False
@@ -628,7 +631,7 @@ class GameScene(Scene):
         """
 
         # Reset the info label, debug Background and reticle positions.
-        self.debug_background.move_absolute(0, height-INFO_LABEL_FONTSIZE - 20)
+        self.debug_background.y = height-INFO_LABEL_FONTSIZE - 20
         self.info_label.y = height - 10
         x, y = width // 2, height // 2
         n = 10
@@ -679,8 +682,7 @@ class GameScene(Scene):
             pyglet.clock.get_fps())
         
         # Calculating debug label width and updating its background accordingly (width/height ratio for Arial=0.52 so we multiply with 1.52)
-        self.debug_background.width_absolute(int(len(self.info_label.text)*INFO_LABEL_FONTSIZE/1.52))
-        self.debug_background.draw()
+        self.debug_background.width =  int(len(self.info_label.text)*INFO_LABEL_FONTSIZE/1.52)
         self.debug_batch.draw()
 
 

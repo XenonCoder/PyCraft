@@ -126,7 +126,7 @@ class Inventory(object):
         size_x, size_y = self._get_hotbar_size()
 
         # Sets background in case window size changed
-        self.hotbar_background.size_absolute(size)
+        self.hotbar_background.size_absolute((size_x, size_y))
         self.hotbar_background.draw()
 
         # Draws each slot in Hotbar

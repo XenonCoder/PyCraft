@@ -163,7 +163,7 @@ class Inventory(object):
             slot_y = line*size_y+y
             self._draw_inventory_slot(slot_x, slot_y, self.block_list[block].get_block_texture())
             if slot_x < self.mouse_x and slot_x+(size_x/HOTBAR_SIZE) > self.mouse_x:
-                if slot_y < self.mouse_y and slot_y+size_x > self.mouse_y:
+                if slot_y < self.mouse_y and slot_y+size_y > self.mouse_y:
                     self.hovered_item = block
                     self._draw_seletion_indicator(slot_x , slot_y)
             colum += 1

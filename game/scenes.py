@@ -34,6 +34,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import random
 import time
 import pyglet
+import os
 
 from collections import deque
 
@@ -569,12 +570,20 @@ class GameScene(Scene):
         elif symbol == key.F5:
             self.scene_manager.save.save_world(self.model)
         elif symbol == key.F12:
-            pyglet.image.get_buffer_manager().get_color_buffer().save('screenshot.png')
+            self._takeScreenshot()
         elif symbol in self.num_keys:
             index = (symbol - self.num_keys[0]) % len(self.inventory)
             self.block = self.inventory[index]
         elif symbol == key.ENTER:
             self.scene_manager.change_scene('MenuScene')
+
+    def _takeScreenshot(self):
+        if not os.path.exists('screenshots/'):
+            os.mkdir("screenshots")
+        shot_number = 0
+        while os.path.exists('screenshots/screenshot - {}.png'.format(shot_number)):
+            shot_number += 1
+        pyglet.image.get_buffer_manager().get_color_buffer().save('screenshots/screenshot - {}.png'.format(shot_number))
 
     def on_key_release(self, symbol, modifiers):
         """Event handler for the Window.on_key_release event.
@@ -655,12 +664,13 @@ class GameScene(Scene):
 
         """
         x, y, z = self.position
-        self.info_label.text = 'FPS = [%02d] : COORDS = [%.2f, %.2f, %.2f] : %d / %d' % (
-            pyglet.clock.get_fps(), x, y, z,
-            self.model.currently_shown, len(self.model.world))
+        self.info_label.text = 'Selected Block = %s : COORDS = [%.2f, %.2f, %.2f] : %d / %d : FPS = [%02d]' % (
+            self.block.name, 
+            x, y, z, self.model.currently_shown, len(self.model.world),
+            pyglet.clock.get_fps())
         
-        # Calculating debug label width and updating its background accordingly
-        self.debugBackground.width_absolute(int(len(self.info_label.text)*INFO_LABEL_FONTSIZE/1.50))
+        # Calculating debug label width and updating its background accordingly (width/height ratio for Arial=0.52 so we multiply with 1.52)
+        self.debugBackground.width_absolute(int(len(self.info_label.text)*INFO_LABEL_FONTSIZE/1.52))
         self.debugBackground.draw()
         self.debugBatch.draw()
 

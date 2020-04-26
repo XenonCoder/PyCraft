@@ -53,8 +53,14 @@ def main():
     scene_manager = SceneManager(window=window)
     pyglet.clock.schedule_interval(scene_manager.update, 1.0 / TICKS_PER_SEC)
 
-    # Setup some OpenGL settings (from game.graphics), and start the game loop:
+    # Setup some OpenGL settings (from game.graphics):
     setup_opengl()
+
+    # Enabeling Alpha for our Debug Text:
+    pyglet.gl.glEnable(pyglet.gl.GL_BLEND)
+    pyglet.gl.glBlendFunc(pyglet.gl.GL_SRC_ALPHA, pyglet.gl.GL_ONE_MINUS_SRC_ALPHA)
+
+    #start the game loop:
     pyglet.app.run()
 
 

@@ -47,6 +47,7 @@ from .blocks import *
 from .utilities import *
 from .graphics import BlockGroup
 from .genworld import *
+from .vertexRectangle import *
 
 class AudioEngine:
     """A high level audio engine for easily playing SFX and Music."""
@@ -194,6 +195,8 @@ class GameScene(Scene):
 
         # A Batch is a collection of vertex lists for batched rendering.
         self.batch = pyglet.graphics.Batch()
+        # Debug Batch gets rendered with all debug infos
+        self.debugBatch = pyglet.graphics.Batch()
 
         # pyglet Groups manages setting/unsetting OpenGL state.
         self.block_group = BlockGroup(
@@ -263,10 +266,12 @@ class GameScene(Scene):
         self.highlight = self.batch.add_indexed(24, GL_LINES, self.block_group, indices,
                                                 'v3f/dynamic', ('c3B', [0]*72))
 
-        # The label that is displayed in the top left of the canvas.
+        # The label that is displayed in the top left of the canvas (also its background).
+        # The Background gets initialized with 0 width, we update its width in draw
+        self.debugBackground = VertexRectangle(0, self.window.height-INFO_LABEL_FONTSIZE - 20, 0, INFO_LABEL_FONTSIZE + 20, (45, 45, 45, 150))
         self.info_label = pyglet.text.Label('', font_name='Arial', font_size=INFO_LABEL_FONTSIZE,
                                             x=10, y=self.window.height - 10, anchor_x='left',
-                                            anchor_y='top', color=(0, 0, 0, 255))
+                                            anchor_y='top', color=(255, 255, 255, 255), batch=self.debugBatch)
 
         # Boolean whether to display loading screen.
         self.initialized = False
@@ -605,7 +610,9 @@ class GameScene(Scene):
 
          Called when the window is resized to a new `width` and `height`.
         """
-        # Reset the info label and reticle positions.
+
+        # Reset the info label, debug Background and reticle positions.
+        self.debugBackground.move_absolute(0, height-INFO_LABEL_FONTSIZE - 20)
         self.info_label.y = height - 10
         x, y = width // 2, height // 2
         n = 10
@@ -651,7 +658,11 @@ class GameScene(Scene):
         self.info_label.text = 'FPS = [%02d] : COORDS = [%.2f, %.2f, %.2f] : %d / %d' % (
             pyglet.clock.get_fps(), x, y, z,
             self.model.currently_shown, len(self.model.world))
-        self.info_label.draw()
+        
+        # Calculating debug label width and updating its background accordingly
+        self.debugBackground.width_absolute(int(len(self.info_label.text)*INFO_LABEL_FONTSIZE/1.50))
+        self.debugBackground.draw()
+        self.debugBatch.draw()
 
 
 class Model(object):
@@ -962,3 +973,4 @@ class HelpScene(Scene):
     def on_draw(self):
         self.window.clear()
         self.batch.draw()
+        

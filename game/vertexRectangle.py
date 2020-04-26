@@ -81,6 +81,14 @@ class VertexRectangle:
         self.__init__(self.x, self.y , w, self.height,
                       self.color)
 
+    def height_absolute(self, h):
+        self.__init__(self.x, self.y , self.width, h,
+                self.color)
+
+    def size_absolute(self, size):
+        self.__init__(self.x, self.y , size[0], size[1],
+            self.color)
+
     def width_relative(self, dw):
         self.__init__(self.x, self.y, self.width + dw, self.height,
                       self.color)

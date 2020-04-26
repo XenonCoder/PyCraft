@@ -380,6 +380,7 @@ class GameScene(Scene):
             self.sector = sector
         m = 8
         dt = min(dt, 0.2)
+        self.inventory.update(dt)
         for _ in range(m):
             self._update(dt / m)
 
@@ -480,17 +481,20 @@ class GameScene(Scene):
 
         """
         if self.exclusive:
-            vector = self.get_sight_vector()
-            block, previous = self.model.hit_test(self.position, vector)
-            if button == mouse.RIGHT or (button == mouse.LEFT and modifiers & key.MOD_CTRL):
-                # ON OSX, control + left click = right click.
-                if previous:
-                    self.model.add_block(previous, self.inventory.getSelectedBlock())
-            elif button == pyglet.window.mouse.LEFT and block:
-                texture = self.model.world[block]
-                if texture != BEDSTONE:
-                    self.model.remove_block(block)
-                    self.audio.play(self.destroy_sfx)
+            if not self.inventory.is_inventory_open:
+                vector = self.get_sight_vector()
+                block, previous = self.model.hit_test(self.position, vector)
+                if button == mouse.RIGHT or (button == mouse.LEFT and modifiers & key.MOD_CTRL):
+                    # ON OSX, control + left click = right click.
+                    if previous:
+                        self.model.add_block(previous, self.inventory.get_selected_block())
+                elif button == pyglet.window.mouse.LEFT and block:
+                    texture = self.model.world[block]
+                    if texture != BEDSTONE:
+                        self.model.remove_block(block)
+                        self.audio.play(self.destroy_sfx)
+            else:
+                self.inventory.on_mouse_press(x, y, button, modifiers)
         else:
             self.set_exclusive_mouse(True)
 
@@ -508,11 +512,13 @@ class GameScene(Scene):
             The movement of the mouse.
 
         """
-        if self.exclusive:
+        if self.exclusive and not self.inventory.is_inventory_open:
             x, y = self.rotation
             x, y = x + dx * LOOK_SPEED_X, y + dy * LOOK_SPEED_Y
             y = max(-90, min(90, y))
             self.rotation = (x, y)
+        elif self.inventory.is_inventory_open:
+            self.inventory.on_mouse_motion(x, y, dx, dy)
 
     def on_key_press(self, symbol, modifiers):
         """Event handler for the Window.on_key_press event.
@@ -528,15 +534,17 @@ class GameScene(Scene):
             Number representing any modifying keys that were pressed.
 
         """
-        if symbol == key.W:
+        if symbol == key.W and not self.inventory.is_inventory_open:
             self.strafe[0] -= 1
-        elif symbol == key.S:
+        elif symbol == key.S and not self.inventory.is_inventory_open:
             self.strafe[0] += 1
-        elif symbol == key.A:
+        elif symbol == key.A and not self.inventory.is_inventory_open:
             self.strafe[1] -= 1
-        elif symbol == key.D:
+        elif symbol == key.D and not self.inventory.is_inventory_open:
             self.strafe[1] += 1
-        elif symbol == key.SPACE:
+        elif symbol == key.I:
+            self.inventory.toggle_inventory()
+        elif symbol == key.SPACE and not self.inventory.is_inventory_open:
             if self.flying:
                 # Reduces vertical flying speed
                 # 0.1 positive value that allows vertical flight up.
@@ -544,9 +552,9 @@ class GameScene(Scene):
             elif self.dy == 0:
                 self.dy = JUMP_SPEED
                 self.audio.play(self.jump_sfx)
-        elif symbol == key.LCTRL:
+        elif symbol == key.LCTRL and not self.inventory.is_inventory_open:
             self.running = True
-        elif symbol == key.LSHIFT:
+        elif symbol == key.LSHIFT and not self.inventory.is_inventory_open:
             if self.flying:
                 # Reduces vertical flying speed
                 # -0.1 negative value that allows vertical flight down.
@@ -569,7 +577,7 @@ class GameScene(Scene):
         elif symbol == key.F12:
             self._takeScreenshot()
         elif symbol in self.num_keys:
-            self.inventory.selectBlock(symbol - self.num_keys[0])
+            self.inventory.select_block(symbol - self.num_keys[0])
         elif symbol == key.ENTER:
             self.scene_manager.change_scene('MenuScene')
 
@@ -609,6 +617,9 @@ class GameScene(Scene):
             self.running = False
         elif symbol == key.LSHIFT:
             self.dy = 0
+
+    def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
+        self.inventory.on_mouse_drag(x, y, dx, dy, buttons, modifiers)
 
     def on_resize(self, width, height):
         """Event handler for the Window.on_resize event.
@@ -663,7 +674,7 @@ class GameScene(Scene):
         """
         x, y, z = self.position
         self.info_label.text = 'Selected Block = %s : COORDS = [%.2f, %.2f, %.2f] : %d / %d : FPS = [%02d]' % (
-            self.inventory.getSelectedBlock().name, 
+            self.inventory.get_selected_block().name, 
             x, y, z, self.model.currently_shown, len(self.model.world),
             pyglet.clock.get_fps())
         

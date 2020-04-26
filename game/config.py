@@ -56,6 +56,11 @@ PLAYER_HEIGHT = 2
 RUNNING = False
 FLYING = False
 
+# Inventory
+HOTBAR_SIZE = 5
+INVENTORY_MARGIN = 16
+PREVIEW_SIZE = 96 # Can only be adjusted in steps of 16
+
 # Look speed
 LOOK_SPEED_X = 0.15
 LOOK_SPEED_Y = 0.15

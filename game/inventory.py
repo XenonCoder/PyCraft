@@ -165,7 +165,7 @@ class Inventory(object):
             if slot_x < self.mouse_x and slot_x+(size_x/HOTBAR_SIZE) > self.mouse_x:
                 if slot_y < self.mouse_y and slot_y+size_y > self.mouse_y:
                     self.hovered_item = block
-                    self._draw_seletion_indicator(slot_x , slot_y)
+                    self._draw_seletion_indicator(slot_x, slot_y)
             colum += 1
 
     def _draw_dragged_item(self):

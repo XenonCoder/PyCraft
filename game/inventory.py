@@ -38,18 +38,12 @@ import os
 
 from collections import deque
 
-from pyglet.gl import *
-from pyglet.media import Player
-from pyglet.window import key, mouse
 from pyglet.sprite import Sprite
 from pyglet.graphics import OrderedGroup
 from pyglet.shapes import Rectangle
 
 from .blocks import *
-from .inventory import *
 from .utilities import *
-from .graphics import BlockGroup
-from .genworld import *
 
 
 class Inventory(object):
@@ -74,8 +68,8 @@ class Inventory(object):
         self.inventory_background = Rectangle(0, 0, self.window.width, self.window.height, (90, 101, 117), batch=self._inventory_batch, group=self.hud_background_group)
         self.inventory_background.opacity = 150
         
-        self.selection_indicator = Rectangle(PREVIEW_SIZE+HIGHLIGHT_PADDING*-1, 0, PREVIEW_SIZE+HIGHLIGHT_PADDING, PREVIEW_SIZE+HIGHLIGHT_PADDING, (0, 0, 0), batch=self._hotbar_batch, group=self.hud_background_group) 
-        self.selection_indicator.opacity = 75
+        self.selection_indicator = Rectangle(0, 0, PREVIEW_SIZE+HIGHLIGHT_PADDING, PREVIEW_SIZE+HIGHLIGHT_PADDING, (0, 0, 0), batch=self._hotbar_batch, group=self.hud_background_group) 
+        self.selection_indicator.opacity = 150
 
         #Last known possition of mouse and hovered item
         self._mouse_x = 0
@@ -90,8 +84,7 @@ class Inventory(object):
 
         # List of all Blocks in the Game 
         self.block_list = [DIRT, DIRT_WITH_GRASS, SAND, SNOW, COBBLESTONE,
-                          BRICK_COBBLESTONE, BRICK, TREE, LEAVES, WOODEN_PLANKS, 
-                          SMOOTH_BRICK, SMOOTH_STACK]
+                          BRICK_COBBLESTONE, BRICK, TREE, LEAVES, WOODEN_PLANKS]
 
         # List of Blockt currently in hotbar
         self._hotbar = self.block_list[:HOTBAR_SIZE]
@@ -171,9 +164,15 @@ class Inventory(object):
                         self._update_seletion_indicator(slot_x , self.hotbar_y)
 
     def _update_inventory(self):
+        line = 0
+        colum = 0
         for block in range(len(self.block_list)):
+            if block-(line*HOTBAR_SIZE) >= HOTBAR_SIZE:
+                line += 1
+                colum = 0
             slot_x = ((PREVIEW_SIZE+INVENTORY_MARGIN)*colum)+self.inventory_x
             slot_y = line*self.size_y+self.inventory_y
+            colum += 1
             if slot_x < self._mouse_x and slot_x+(self.size_x/HOTBAR_SIZE) > self._mouse_x:
                 if slot_y < self._mouse_y and slot_y+self.size_y > self._mouse_y:
                     self._hovered_item = block
@@ -186,16 +185,14 @@ class Inventory(object):
         pass
 
     def _rebuild_inventory_overlay(self):
-        """Draws inventory overlay, Position can be changed with x and y
-        """
-        block_count = len(self.block_list)
+        """Draws inventory overlay, Position can be changed with x and y"""
         line = 0
         colum = 0
 
         self.inventory_background.width = self.size_x
         self.inventory_background.height = self.window.height - self.size_y
         self.inventory_background.y = self.size_y
-        self.inventory_background.s = self.hotbar_x
+        self.inventory_background.x = self.hotbar_x
 
         #lay out Blocks
         _inventory_sprites = []
@@ -265,6 +262,7 @@ class Inventory(object):
     def draw(self):
         # Draws Inventory
         self._hotbar_batch.draw()
+
         if self.is_inventory_open:
             self._inventory_batch.draw()
 

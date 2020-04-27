@@ -277,3 +277,4 @@ class Inventory(object):
         self.size_x = size_x
         self.size_y = size_y
         self._rebuild_hotbar()
+        self._rebuild_inventory_overlay()

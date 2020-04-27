@@ -36,7 +36,7 @@ from pyglet.gl import *
 import pyglet
 
 
-def _tex_coord(x, y, n=8):
+def _tex_coord(x, y, n=4):
     """ Return the bounding vertices of the texture square.
 
     """

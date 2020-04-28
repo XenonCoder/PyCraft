@@ -67,7 +67,7 @@ class Inventory(object):
         # Inventory Background
         self.inventory_background = Rectangle(0, 0, self.window.width, self.window.height, (90, 101, 117), batch=self._inventory_batch, group=self.hud_background_group)
         self.inventory_background.opacity = 150
-        
+
         self.selection_indicator = Rectangle(0, 0, PREVIEW_SIZE+HIGHLIGHT_PADDING, PREVIEW_SIZE+HIGHLIGHT_PADDING, (0, 0, 0), batch=self._hotbar_batch, group=self.hud_background_group) 
         self.selection_indicator.opacity = 150
 
@@ -82,7 +82,7 @@ class Inventory(object):
         self._draged_item = []
         self._hovered_item = None
 
-        # List of all Blocks in the Game 
+        # List of all Blocks in the Game
         self.block_list = [DIRT, DIRT_WITH_GRASS, SAND, SNOW, COBBLESTONE,
                           BRICK_COBBLESTONE, BRICK, TREE, LEAVES, WOODEN_PLANKS]
 
@@ -90,7 +90,7 @@ class Inventory(object):
         self._hotbar = self.block_list[:HOTBAR_SIZE]
         self._hotbar_sprites = []
         self._inventory_sprites = []
-        
+
         #Hotbar Size
         size_x, size_y = self._get_hotbar_size()
         self.size_x = size_x
@@ -103,9 +103,15 @@ class Inventory(object):
     def toggle_inventory(self):
         """Opens/Closes Inventory
         """
+        # Resetting Inventory and cleaning up
+        self._on_drag_stop()
+        self._mouse_x = 0
+        self._mouse_y = 0
+
+        self._rebuild_inventory_overlay()
+
         self.window.set_exclusive_mouse(self.is_inventory_open)
         self.is_inventory_open = not self.is_inventory_open
-        self._rebuild_inventory_overlay()
 
     def _rebuild_hotbar(self):
         self._hotbar_sprites = []
@@ -145,11 +151,15 @@ class Inventory(object):
         """Moves the Selection Indicator and draws it above a specific sprite"""
         x += INVENTORY_MARGIN/2
         y += INVENTORY_MARGIN/2
-        for i_x in range(int(PREVIEW_SIZE/16)):
-            for i_y in range(int(PREVIEW_SIZE/16)):
-                sp = Sprite(img, x=x + i_x*16, y=y + i_y*16, group=self.hud_group, batch=render_batch)
-                sprite_list.append(sp)
-    
+        sp = Sprite(img, x=x, y=y, group=self.hud_group, batch=render_batch)
+
+        # todo, shouldn't this line be set on startup?
+        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_NEAREST)
+
+        # Scaling Image to fit Preview Size
+        sp.scale = PREVIEW_SIZE/16
+        sprite_list.append(sp)
+
     def _update_hotbar(self):
         for i in range(HOTBAR_SIZE):
             if i == self.selected_block and not self.is_inventory_open:
@@ -180,8 +190,8 @@ class Inventory(object):
 
     def _update_seletion_indicator(self, x, y):
         """Updates the Selection Indicator """
-        self.selection_indicator.x = x++HIGHLIGHT_PADDING/2
-        self.selection_indicator.y = y++HIGHLIGHT_PADDING/2
+        self.selection_indicator.x = x+HIGHLIGHT_PADDING/2
+        self.selection_indicator.y = y+HIGHLIGHT_PADDING/2
         pass
 
     def _rebuild_inventory_overlay(self):
@@ -221,15 +231,13 @@ class Inventory(object):
         self._is_dragging = False
         if self._is_over_hotbar:
             self._hotbar[self._drag_hotbar_slot] = self.block_list[self._hovered_item]
-            self._rebuild_hotbar()
-            self._draged_item = []
-            self._hovered_item = None
-            self._rebuild_hotbar()
-
-    def on_mouse_press(self, x, y, button, modifiers):
-        pass
+        self._draged_item = []
+        self._hovered_item = None
+        self._rebuild_hotbar()
 
     def update(self, dt):
+        if len(self._hotbar_sprites) == 0:
+            self._rebuild_hotbar()
         if self.is_inventory_open:
             self._update_inventory()
             if self._drag_x == 0 and self._drag_y == 0 and self._is_dragging:
@@ -268,11 +276,3 @@ class Inventory(object):
 
         if self._is_dragging:
             self._draw_dragged_item()
-
-    def resize(self, width, height):
-        # Sets background in case window size changed
-        size_x, size_y = self._get_hotbar_size()
-        self.size_x = size_x
-        self.size_y = size_y
-        self._rebuild_hotbar()
-        self._rebuild_inventory_overlay()

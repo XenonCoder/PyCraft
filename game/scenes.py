@@ -496,8 +496,6 @@ class GameScene(Scene):
                     if texture != BEDSTONE:
                         self.model.remove_block(block)
                         self.audio.play(self.destroy_sfx)
-            else:
-                self.inventory.on_mouse_press(x, y, button, modifiers)
         else:
             self.set_exclusive_mouse(True)
 
@@ -622,7 +620,10 @@ class GameScene(Scene):
             self.dy = 0
 
     def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
-        self.inventory.on_mouse_drag(x, y, dx, dy, buttons, modifiers)
+        if self.inventory.is_inventory_open:
+            self.inventory.on_mouse_drag(x, y, dx, dy, buttons, modifiers)
+        else:
+            self.on_mouse_motion(x, y, dx ,dy)
 
     def on_resize(self, width, height):
         """Event handler for the Window.on_resize event.
@@ -636,7 +637,6 @@ class GameScene(Scene):
         x, y = width // 2, height // 2
         n = 10
         self.reticle.vertices[:] = (x - n, y, x + n, y, x, y - n, x, y + n)
-        self.inventory.resize(width, height)
 
     def on_draw(self):
         """Event handler for the Window.on_draw event.
@@ -677,10 +677,10 @@ class GameScene(Scene):
         """
         x, y, z = self.position
         self.info_label.text = 'Selected Block = %s : COORDS = [%.2f, %.2f, %.2f] : %d / %d : FPS = [%02d]' % (
-            self.inventory.get_selected_block().name, 
+            self.inventory.get_selected_block().name,
             x, y, z, self.model.currently_shown, len(self.model.world),
             pyglet.clock.get_fps())
-        
+
         # Calculating debug label width and updating its background accordingly (width/height ratio for Arial=0.52 so we multiply with 1.52)
         self.debug_background.width =  int(len(self.info_label.text)*INFO_LABEL_FONTSIZE/1.52)
         self.debug_batch.draw()

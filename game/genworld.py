@@ -33,7 +33,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import math
 import random
-import numpy
+import noise
 
 from .blocks import *
 from .utilities import *
@@ -81,45 +81,14 @@ def generate_world(self):
                     self.add_block((x, y, z), block, immediate=False)
             s -= d  # decrement side length so hills taper off
 
-    def enlarge(array):
-        """Re-sample an image with a linear interpolation"""
-        size = array.shape
-        size = (size[0] - 1) * 2 + 1, (size[1] - 1) * 2 + 1
-        newarray = numpy.empty(size, dtype=int)
-        newarray[0::2, 0::2] = array
-        newarray[1::2, 0::2] = (newarray[0:-1:2, 0::2] + newarray[2::2, 0::2]) // 2
-        newarray[:, 1::2] = (newarray[:,0:-1:2] + newarray[:,2::2]) // 2
-        return newarray
-
-    import noise
-
-    # coherent noise for sky
-    def add_noise_layer(base_array, layer):
-        bshape = base_array.shape
-        slayer = 2**layer
-        sx = bshape[0] // slayer + (bshape[0] % slayer != 0)
-        sz = bshape[1] // slayer + (bshape[1] % slayer != 0)
-        shape = numpy.array((sx + 1, sz + 1))
-        shape = numpy.clip(shape, 5, base_array.shape)
-        array = numpy.random.randint(0, 2, size=shape) * slayer
-        array[0,:] = 0
-        array[-1,:] = 0
-        array[:,0] = 0
-        array[:,-1] = 0
-        while array.shape < base_array.shape:
-            array = enlarge(array)
-        base_array[...] += array[0:base_array.shape[0], 0:base_array.shape[1]]
-
-    cloud_map = numpy.zeros(shape=(n*2+1, n*2+1), dtype=int)
-    for i in range(1, max(2, int(numpy.log(n)-1))):
-        add_noise_layer(cloud_map, layer=i)
-
-    cloudiness = 0.3  # between 0 (blue sky) and 1 (white sky)
-    cloud_y = y + 20
-    icloudiness = cloud_map.min() + int(cloudiness * (cloud_map.max()-cloud_map.min()))
-
-    cloud_map = cloud_map < icloudiness
-    for x in range(-n, n + 1):
-        for z in range(-n, n + 1):
-            if cloud_map[x+n, z+n]:
-                self.add_block((x, cloud_y, z), CLOUD, immediate=False)
+    cloudiness = 0.35  # between 0 (blue sky) and 1 (white sky)
+    sky_n = 100  # 1/2 width and height of sky
+    cloud_y = y + 20  # height of the sky
+    octaves = 3
+    freq = 20
+    nb = sky_n * 2 + 1
+    for x in range(0, nb):
+        for z in range(0, nb):
+            c = noise.snoise2(x/freq, z/freq, octaves=octaves)
+            if (c + 1) * 0.5 < cloudiness:
+                self.add_block((x-sky_n, cloud_y, z-sky_n), CLOUD, immediate=False)

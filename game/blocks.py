@@ -78,9 +78,10 @@ BRICK = Block('brick', _tex_coords((3, 1), (3, 1), (3, 1)))
 BEDSTONE = Block('bedstone', _tex_coords((2, 1), (2, 1), (2, 1)))
 TREE = Block('tree', _tex_coords((1, 2), (1, 2), (0, 2)))
 LEAVES = Block('leaves', _tex_coords((2, 2), (2, 2), (2, 2)))
-SNOW = Block('snow', _tex_coords((1, 3), (0, 1), (0, 3)))
+SNOW = Block('snow', _tex_coords((1, 3), (1, 3), (1, 3)))
 WOODEN_PLANKS = Block('wooden_planks', _tex_coords((2, 3), (2, 3), (2, 3)))
 CLOUD = Block('snow', _tex_coords((1, 3), (1, 3), (1, 3)))
+DIRT_WITH_SNOW = Block('dirt_with_snow', _tex_coords((1, 3), (0, 1), (0, 3)))
 
 # A reference to the 6 faces (sides) of the blocks:
 FACES = [(0, 1, 0), (0, -1, 0), (-1, 0, 0), (1, 0, 0), (0, 0, 1), (0, 0, -1)]

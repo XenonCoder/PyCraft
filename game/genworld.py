@@ -31,8 +31,6 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
-import math
-import random
 import noise
 
 from .blocks import *
@@ -48,7 +46,6 @@ def generate_world(self):
     for x in range(-n, n + 1, s):
         for z in range(-n, n + 1, s):
             # create a layer stone an DIRT_WITH_GRASS everywhere.
-            self.add_block((x, y - 2, z), DIRT_WITH_GRASS, immediate=True)
             self.add_block((x, y - 3, z), BEDSTONE, immediate=False)
             if x in (-n, n) or z in (-n, n):
                 # create outer walls.
@@ -58,27 +55,68 @@ def generate_world(self):
 
     # generate the hills randomly
 
-    if not HILLS_ON:
-        return
+    if HILLS_ON:
+        lookup_terrain = []
+        def add_terrain_map(height, terrains):
+            """Add a new entry to the height map lookup table.
 
-    o = n - 10
-    for _ in range(120):
-        a = random.randint(-o, o)  # x position of the hill
-        b = random.randint(-o, o)  # z position of the hill
-        c = -1  # base of the hill
-        h = random.randint(1, 6)  # height of the hill
-        s = random.randint(4, 8)  # 2 * s is the side length of the hill
-        d = 1  # how quickly to taper off the hills
-        block = random.choice([DIRT_WITH_GRASS, SNOW, SAND])
-        for y in range(c, c + h):
-            for x in range(a - s, a + s + 1):
-                for z in range(b - s, b + s + 1):
-                    if (x - a) ** 2 + (z - b) ** 2 > (s + 1) ** 2:
-                        continue
-                    if (x - 0) ** 2 + (z - 0) ** 2 < 5 ** 2:  # 6 = flat map
-                        continue
-                    self.add_block((x, y, z), block, immediate=False)
-            s -= d  # decrement side length so hills taper off
+            `height` will be the height at this part of the height map.
+            and `terrains` contains blocks for each vertical voxels. The last
+            one is on top, and the first one is used for all the remaining voxels
+            on bottom.
+            """
+            lookup_terrain.append((height, terrains))
+
+        add_terrain_map(1, [WATER])
+        add_terrain_map(1, [WATER])
+        add_terrain_map(1, [WATER])
+        add_terrain_map(1, [WATER])
+        add_terrain_map(1, [WATER])
+        add_terrain_map(1, [WATER])
+        add_terrain_map(1, [SAND])
+        add_terrain_map(1, [SAND])
+        add_terrain_map(2, [SAND])
+        add_terrain_map(1, [SAND])
+        add_terrain_map(1, [SAND])
+        add_terrain_map(1, [DIRT_WITH_GRASS])
+        add_terrain_map(1, [DIRT_WITH_GRASS])
+        add_terrain_map(2, [DIRT, DIRT_WITH_GRASS])
+        add_terrain_map(2, [DIRT, DIRT_WITH_GRASS])
+        add_terrain_map(3, [DIRT, DIRT_WITH_GRASS])
+        add_terrain_map(4, [DIRT, DIRT_WITH_GRASS])
+        add_terrain_map(4, [DIRT, DIRT_WITH_GRASS])
+        add_terrain_map(5, [DIRT, DIRT_WITH_GRASS])
+        add_terrain_map(5, [DIRT, DIRT_WITH_GRASS])
+        add_terrain_map(6, [DIRT, DIRT_WITH_GRASS])
+        add_terrain_map(6, [DIRT, DIRT_WITH_GRASS])
+        add_terrain_map(7, [DIRT])
+        add_terrain_map(8, [DIRT])
+        add_terrain_map(9, [DIRT])
+        add_terrain_map(10, [DIRT, DIRT_WITH_SNOW])
+        add_terrain_map(11, [DIRT, DIRT_WITH_SNOW, SNOW])
+        add_terrain_map(12, [DIRT, DIRT_WITH_SNOW, SNOW, SNOW])
+        add_terrain_map(13, [DIRT, DIRT_WITH_SNOW, SNOW, SNOW])
+        add_terrain_map(14, [DIRT, DIRT_WITH_SNOW, SNOW, SNOW])
+        add_terrain_map(15, [DIRT, DIRT_WITH_SNOW, SNOW, SNOW])
+
+        octaves = 4
+        freq = 38
+        for x in range(-n + 1, n):
+            for z in range(-n + 1, n):
+                c = noise.snoise2(x/freq, z/freq, octaves=octaves)
+                c = int((c + 1) * 0.5 * len(lookup_terrain))
+                if c < 0:
+                    c = 0
+                nb_block, terrains = lookup_terrain[c]
+                for i in range(nb_block):
+                    block = terrains[-1-i] if i < len(terrains) else terrains[0]
+                    self.add_block((x, y+nb_block-2-i, z), block, immediate=False)
+    else:
+        for x in range(-n, n + 1, s):
+            for z in range(-n, n + 1, s):
+                self.add_block((x, y - 2, z), DIRT_WITH_GRASS, immediate=False)
+
+    # generate the clouds
 
     cloudiness = 0.35  # between 0 (blue sky) and 1 (white sky)
     sky_n = 100  # 1/2 width and height of sky

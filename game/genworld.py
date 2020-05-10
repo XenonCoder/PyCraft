@@ -37,8 +37,7 @@ import noise
 
 from .blocks import *
 from .utilities import *
-from .graphics import BlockGroup
-from wheel.pep425tags import calculate_macosx_platform_tag
+
 
 def generate_world(self):
     """Randomly generate a new world and place all the blocks"""

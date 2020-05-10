@@ -365,6 +365,10 @@ class GameScene(Scene):
 
             if not has_save:
                 generate_world(self.model)
+                # Move the actor above the terrain
+                while not self.model.empty(self.position):
+                    x, y, z = self.position
+                    self.position = x, y + 1, z
 
             self.initialized = True
 
@@ -709,6 +713,11 @@ class Model(object):
             previous = checked_position
             x, y, z = x + dx / m, y + dy / m, z + dz / m
         return None, None
+
+    def empty(self, position):
+        """ Returns True if given `position` does not contain block.
+        """
+        return not position in self.world
 
     def exposed(self, position):
         """ Returns False if given `position` is surrounded on all 6 sides by

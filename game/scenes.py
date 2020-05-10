@@ -46,7 +46,7 @@ from pyglet.graphics import OrderedGroup
 from .blocks import *
 from .utilities import *
 from .graphics import BlockGroup
-from .genworld import *
+from .genworld import WorldGenerator
 
 class AudioEngine:
     """A high level audio engine for easily playing SFX and Music."""
@@ -364,7 +364,9 @@ class GameScene(Scene):
                 has_save = self.scene_manager.save.load_world(self.model)
 
             if not has_save:
-                generate_world(self.model)
+                generator = WorldGenerator(self.model)
+                generator.hills_enabled = HILLS_ON
+                generator.generate()
                 # Move the actor above the terrain
                 while not self.model.empty(self.position):
                     x, y, z = self.position

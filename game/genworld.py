@@ -32,34 +32,63 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 import noise
-
 from .blocks import *
-from .utilities import *
 
 
-def generate_world(self):
-    """Randomly generate a new world and place all the blocks"""
-    n = 80  # 1/2 width and height of world
-    s = 1  # step size
-    y = 0  # initial y height
+class WorldGenerator:
+    """Generate a world model"""
 
-    for x in range(-n, n + 1, s):
-        for z in range(-n, n + 1, s):
-            # create a layer stone an DIRT_WITH_GRASS everywhere.
-            self.add_block((x, y - 3, z), BEDSTONE, immediate=False)
-            if x in (-n, n) or z in (-n, n):
-                # create outer walls.
-                # Setting values for the Bedrock (depth, and height of the perimeter wall).
-                for dy in range(-2, 9):
-                    self.add_block((x, y + dy, z), BEDSTONE, immediate=False)
+    def __init__(self, model):
+        self.model = model
 
-    # generate the hills randomly
+        self.hills_enabled = True
+        """If True the generator uses a procedural generation for the map.
+        Else, a flat floor will be generated."""
 
-    if HILLS_ON:
+        self.cloudiness = 0.35
+        """The cloudiness can be custom to change the about of clouds generated.
+        0 means blue sky, and 1 means white sky."""
+
+    def generate(self):
+        """Randomly generate a new world and place all the blocks"""
+        n = 80  # 1/2 width and height of world
+        y = 0  # initial y height
+
+        self._generate_enclosure(y_pos=y - 2, height=12, half_size=n)
+        if self.hills_enabled:
+            self._generate_random_map(y_pos=y - 2, half_size=n)
+        else:
+            self._generate_floor(y_pos=y - 2, half_size=n)
+        if self.cloudiness > 0:
+            self._generate_clouds(y_pos=y + 20, half_size=n + 20)
+
+    def _generate_enclosure(self, y_pos, height, half_size):
+        """Generate an enclosure with unbreakable blocks on the floor and
+        and on the side.
+        """
+        n = half_size
+        for x in range(-n, n + 1):
+            for z in range(-n, n + 1):
+                # create a layer stone an DIRT_WITH_GRASS everywhere.
+                self.model.add_block((x, y_pos, z), BEDSTONE, immediate=False)
+                if x in (-n, n) or z in (-n, n):
+                    # create outer walls.
+                    # Setting values for the Bedrock (depth, and height of the perimeter wall).
+                    for dy in range(height):
+                        self.model.add_block((x, y_pos + dy, z), BEDSTONE, immediate=False)
+
+    def _generate_floor(self, y_pos, half_size):
+        """Generate a standard floor at a specific height"""
+        for x in range(-half_size + 1, half_size):
+            for z in range(-half_size + 1, half_size):
+                self.model.add_block((x, y_pos, z), DIRT_WITH_GRASS, immediate=False)
+
+    def _generate_random_map(self, y_pos, half_size):
+        n = half_size
         lookup_terrain = []
         def add_terrain_map(height, terrains):
             """Add a new entry to the height map lookup table.
-
+    
             `height` will be the height at this part of the height map.
             and `terrains` contains blocks for each vertical voxels. The last
             one is on top, and the first one is used for all the remaining voxels
@@ -110,22 +139,17 @@ def generate_world(self):
                 nb_block, terrains = lookup_terrain[c]
                 for i in range(nb_block):
                     block = terrains[-1-i] if i < len(terrains) else terrains[0]
-                    self.add_block((x, y+nb_block-2-i, z), block, immediate=False)
-    else:
-        for x in range(-n, n + 1, s):
-            for z in range(-n, n + 1, s):
-                self.add_block((x, y - 2, z), DIRT_WITH_GRASS, immediate=False)
+                    self.model.add_block((x, y_pos+nb_block-i, z), block, immediate=False)
 
-    # generate the clouds
-
-    cloudiness = 0.35  # between 0 (blue sky) and 1 (white sky)
-    sky_n = 100  # 1/2 width and height of sky
-    cloud_y = y + 20  # height of the sky
-    octaves = 3
-    freq = 20
-    nb = sky_n * 2 + 1
-    for x in range(0, nb):
-        for z in range(0, nb):
-            c = noise.snoise2(x/freq, z/freq, octaves=octaves)
-            if (c + 1) * 0.5 < cloudiness:
-                self.add_block((x-sky_n, cloud_y, z-sky_n), CLOUD, immediate=False)
+    def _generate_clouds(self, y_pos, half_size):
+        """Generate clouds at this `height` and covering this `half_size`
+        centered to 0.
+        """
+        octaves = 3
+        freq = 20
+        nb = half_size * 2 + 1
+        for x in range(0, nb):
+            for z in range(0, nb):
+                c = noise.snoise2(x/freq, z/freq, octaves=octaves)
+                if (c + 1) * 0.5 < self.cloudiness:
+                    self.model.add_block((x-half_size, y_pos, z-half_size), CLOUD, immediate=False)

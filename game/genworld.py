@@ -32,6 +32,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 import noise
+import random
 from .blocks import *
 
 
@@ -49,6 +50,9 @@ class WorldGenerator:
         """The cloudiness can be custom to change the about of clouds generated.
         0 means blue sky, and 1 means white sky."""
 
+        self.nb_trees = 200
+        """Number of trees to generate"""
+
     def generate(self):
         """Randomly generate a new world and place all the blocks"""
         n = 80  # 1/2 width and height of world
@@ -59,6 +63,8 @@ class WorldGenerator:
             self._generate_random_map(y_pos=y - 2, half_size=n)
         else:
             self._generate_floor(y_pos=y - 2, half_size=n)
+        if self.nb_trees > 0:
+            self._generate_trees(y_pos=y - 2, half_size=n - 3)
         if self.cloudiness > 0:
             self._generate_clouds(y_pos=y + 20, half_size=n + 20)
 
@@ -140,6 +146,111 @@ class WorldGenerator:
                 for i in range(nb_block):
                     block = terrains[-1-i] if i < len(terrains) else terrains[0]
                     self.model.add_block((x, y_pos+nb_block-i, z), block, immediate=False)
+
+    def _generate_trees(self, y_pos, half_size):
+        def get_biome(x, y, z):
+            """Return the biome at a location of the map plus the first empty place."""
+            # This loop could be removed using procedural height map
+            while not self.model.empty((x, y, z)):
+                y = y + 1
+            block = self.model.world[x, y - 1, z]
+            return block, y
+
+        for _ in range(self.nb_trees):
+            x = random.randint(-half_size, half_size)
+            z = random.randint(-half_size, half_size)
+            biome, start_pos = get_biome(x, y_pos + 1, z)
+            if biome not in [DIRT, DIRT_WITH_GRASS, SAND]:
+                continue
+            if biome == SAND:
+                height = random.randint(4, 5)
+                self._create_coconut_tree(x, start_pos, z, height)
+            elif start_pos > 6:
+                height = random.randint(3, 5)
+                self._create_fir_tree(x, start_pos, z, height)
+            else:
+                height = random.randint(3, 7 - (start_pos - y_pos) // 3)
+                self._create_default_tree(x, start_pos, z, height)
+
+    def _create_plus(self, x, y, z, block):
+        self.model.add_block((x, y, z), block, immediate=False)
+        self.model.add_block((x - 1, y, z), block, immediate=False)
+        self.model.add_block((x + 1, y, z), block, immediate=False)
+        self.model.add_block((x, y, z - 1), block, immediate=False)
+        self.model.add_block((x, y, z + 1), block, immediate=False)
+
+    def _create_box(self, x, y, z, block):
+        for i in range(9):
+            dx, dz = i // 3 - 1, i % 3 - 1
+            self.model.add_block((x + dx, y, z + dz), block, immediate=False)
+
+    def _create_default_tree(self, x, y, z, height):
+        if height == 0:
+            return
+        if height == 1:
+            self._create_plus(x, y, z, LEAVES)
+            return
+        if height == 2:
+            self.model.add_block((x, y, z), TREE, immediate=False)
+            self.model.add_block((x, y + 1, z), LEAVES, immediate=False)
+            return
+        y_tree = 0
+        root_height = 2 if height >= 4 else 1
+        for _ in range(root_height):
+            self.model.add_block((x, y + y_tree, z), TREE, immediate=False)
+            y_tree += 1
+        self._create_plus(x, y + y_tree, z, LEAVES)
+        y_tree += 1
+        for _ in range(height - 4):
+            self._create_box(x, y + y_tree, z, LEAVES)
+            y_tree += 1
+        self._create_plus(x, y + y_tree, z, LEAVES)
+
+    def _create_fir_tree(self, x, y, z, height):
+        if height == 0:
+            return
+        if height == 1:
+            self._create_plus(x, y, z, LEAVES)
+            return
+        if height == 2:
+            self.model.add_block((x, y, z), TREE, immediate=False)
+            self.model.add_block((x, y + 1, z), LEAVES, immediate=False)
+            return
+        y_tree = 0
+        self.model.add_block((x, y + y_tree, z), TREE, immediate=False)
+        y_tree += 1
+        self._create_box(x, y + y_tree, z, LEAVES)
+        self.model.add_block((x, y + y_tree, z), TREE, immediate=False)
+        y_tree += 1
+        h_layer = (height - 2) // 2
+        for _ in range(h_layer):
+            self._create_plus(x, y + y_tree, z, LEAVES)
+            self.model.add_block((x, y + y_tree, z), TREE, immediate=False)
+            y_tree += 1
+        for _ in range(h_layer):
+            self.model.add_block((x, y + y_tree, z), LEAVES, immediate=False)
+            y_tree += 1
+
+    def _create_coconut_tree(self, x, y, z, height):
+        y_tree = 0
+        for _ in range(height - 1):
+            self.model.add_block((x, y + y_tree, z), TREE, immediate=False)
+            y_tree += 1
+        self.model.add_block((x + 1, y + y_tree, z), LEAVES, immediate=False)
+        self.model.add_block((x - 1, y + y_tree, z), LEAVES, immediate=False)
+        self.model.add_block((x, y + y_tree, z + 1), LEAVES, immediate=False)
+        self.model.add_block((x, y + y_tree, z - 1), LEAVES, immediate=False)
+        if height >= 5:
+            self.model.add_block((x + 2, y + y_tree, z), LEAVES, immediate=False)
+            self.model.add_block((x - 2, y + y_tree, z), LEAVES, immediate=False)
+            self.model.add_block((x, y + y_tree, z + 2), LEAVES, immediate=False)
+            self.model.add_block((x, y + y_tree, z - 2), LEAVES, immediate=False)
+        if height >= 6:
+            y_tree -= 1
+            self.model.add_block((x + 3, y + y_tree, z), LEAVES, immediate=False)
+            self.model.add_block((x - 3, y + y_tree, z), LEAVES, immediate=False)
+            self.model.add_block((x, y + y_tree, z + 3), LEAVES, immediate=False)
+            self.model.add_block((x, y + y_tree, z - 3), LEAVES, immediate=False)
 
     def _generate_clouds(self, y_pos, half_size):
         """Generate clouds at this `height` and covering this `half_size`

@@ -55,6 +55,10 @@ class WorldGenerator:
         self.nb_trees = 3
         """Max number of trees to generate per sectors"""
 
+        self.enclosure = True
+        """If true the world is limited to a fixed size, else the world is infinitely
+        generated."""
+
         self.lookup_terrain = []
         def add_terrain_map(height, terrains):
             """Add a new entry to the height map lookup table.
@@ -130,19 +134,22 @@ class WorldGenerator:
                 continue
             # create a layer stone an DIRT_WITH_GRASS everywhere.
             self.model.add_block((x, y_pos, z), BEDSTONE, immediate=False)
-            if x in (-n, n) or z in (-n, n):
+
+            if self.enclosure:
                 # create outer walls.
                 # Setting values for the Bedrock (depth, and height of the perimeter wall).
-                for dy in range(height):
-                    self.model.add_block((x, y_pos + dy, z), BEDSTONE, immediate=False)
+                if x in (-n, n) or z in (-n, n):
+                    for dy in range(height):
+                        self.model.add_block((x, y_pos + dy, z), BEDSTONE, immediate=False)
 
     def _generate_floor(self, sector, y_pos, half_size):
         """Generate a standard floor at a specific height"""
         for x, z in self._iter_xz(sector):
-            if x <= -half_size or x >= half_size - 1:
-                continue
-            if z <= -half_size or z >= half_size - 1:
-                continue
+            if self.enclosure:
+                if x <= -half_size or x >= half_size - 1:
+                    continue
+                if z <= -half_size or z >= half_size - 1:
+                    continue
             self.model.add_block((x, y_pos, z), DIRT_WITH_GRASS, immediate=False)
 
     def _generate_random_map(self, sector, y_pos, half_size):
@@ -150,8 +157,9 @@ class WorldGenerator:
         octaves = 4
         freq = 38
         for x, z in self._iter_xz(sector):
-            if x <= -n or x >= n - 1 or z <= -n or z >= n - 1:
-                continue
+            if self.enclosure:
+                if x <= -n or x >= n - 1 or z <= -n or z >= n - 1:
+                    continue
             c = noise.snoise2(x/freq, z/freq, octaves=octaves)
             c = int((c + 1) * 0.5 * len(self.lookup_terrain))
             if c < 0:
@@ -182,8 +190,9 @@ class WorldGenerator:
         for _ in range(nb_trees):
             x = sector[0] * utilities.SECTOR_SIZE + 3 + random.randint(0, utilities.SECTOR_SIZE-7)
             z = sector[2] * utilities.SECTOR_SIZE + 3 + random.randint(0, utilities.SECTOR_SIZE-7)
-            if x < -n + 2 or x > n - 2 or z < -n + 2 or z > n - 2:
-                continue
+            if self.enclosure:
+                if x < -n + 2 or x > n - 2 or z < -n + 2 or z > n - 2:
+                    continue
 
             biome, start_pos = get_biome(x, y_pos + 1, z)
             if biome not in [DIRT, DIRT_WITH_GRASS, SAND]:

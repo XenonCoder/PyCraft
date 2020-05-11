@@ -366,7 +366,12 @@ class GameScene(Scene):
             if not has_save:
                 generator = WorldGenerator(self.model)
                 generator.hills_enabled = HILLS_ON
-                generator.generate()
+                self.model.generator = generator
+
+                # Make sure the sector containing the actor is loaded
+                sector = sectorize(self.position)
+                self.model.show_sector(sector)
+
                 # Move the actor above the terrain
                 while not self.model.empty(self.position):
                     x, y, z = self.position
@@ -670,6 +675,9 @@ class Model(object):
         # This defines all the blocks that are currently in the world.
         self.world = {}
 
+        # Procedural generator
+        self.generator = None
+
         # Same mapping as `world` but only contains blocks that are shown.
         self.shown = {}
 
@@ -858,6 +866,9 @@ class Model(object):
         drawn to the canvas.
 
         """
+        if self.generator is not None and sector not in self.sectors:
+            self.generator.generate(sector)
+
         for position in self.sectors.get(sector, []):
             if position not in self.shown and self.exposed(position):
                 self.show_block(position, False)

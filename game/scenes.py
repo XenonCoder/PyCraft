@@ -48,6 +48,7 @@ from .utilities import *
 from .graphics import BlockGroup
 from .genworld import WorldGenerator
 
+
 class AudioEngine:
     """A high level audio engine for easily playing SFX and Music."""
 
@@ -238,6 +239,9 @@ class GameScene(Scene):
         # Which sector the player is currently in.
         self.sector = None
 
+        # True if the location of the camera have changed between an update
+        self.frustum_updated = False
+
         # Velocity in the y (upward) direction.
         self.dy = 0
 
@@ -375,17 +379,22 @@ class GameScene(Scene):
                 # Move the actor above the terrain
                 while not self.model.empty(self.position):
                     x, y, z = self.position
-                    self.position = x, y + 1, z
+                    position = x, y + 1, z
+                    if self.position != position:
+                        self.position = position
+                        self.frustum_updated = True
+
 
             self.initialized = True
 
         self.model.process_queue()
-        sector = sectorize(self.position)
-        if sector != self.sector:
-            self.model.change_sectors(self.sector, sector)
-            # if self.sector is None:
-            #     self.model.process_entire_queue()
+
+        if self.frustum_updated:
+            sector = sectorize(self.position)
+            self.update_shown_sectors(self.position, self.rotation)
             self.sector = sector
+            self.frustum_updated = False
+
         m = 8
         dt = min(dt, 0.2)
         for _ in range(m):
@@ -420,7 +429,10 @@ class GameScene(Scene):
         x, y, z = self.collide((x + dx, y + dy, z + dz), PLAYER_HEIGHT)
         # fix bug for jumping outside the wall and falling to infinity.
         y = max(-1.25, y)
-        self.position = (x, y, z)
+        position = (x, y, z)
+        if self.position != position:
+            self.position = position
+            self.frustum_updated = True
 
     def collide(self, position, height):
         """ Checks to see if the player at the given `position` and `height`
@@ -467,6 +479,31 @@ class GameScene(Scene):
                         self.dy = 0
                     break
         return tuple(p)
+
+    def update_shown_sectors(self, position, rotation):
+        """Update shown sectors according to the actual frustum.
+
+        A sector is a contiguous x, y sub-region of world. Sectors are
+        used to speed up world rendering.
+        """
+        sector = sectorize(position)
+        if self.sector == sector:
+            # The following computation is based on the actual sector
+            # So if there is no changes on the sector, it have to display
+            # The exact same thing
+            return
+
+        sectors_to_show = []
+        pad = 4
+        for dx in range(-pad, pad + 1):
+            for dy in [0]:  # range(-pad, pad + 1):
+                for dz in range(-pad, pad + 1):
+                    if dx ** 2 + dy ** 2 + dz ** 2 > (pad + 1) ** 2:
+                        # Skip sectors outside of the sphere of radius pad+1
+                        continue
+                    x, y, z = sector
+                    sectors_to_show.append((x + dx, y + dy, z + dz))
+        self.model.show_only_sectors(sectors_to_show)
 
     def on_mouse_press(self, x, y, button, modifiers):
         """Event handler for the Window.on_mouse_press event.
@@ -520,7 +557,10 @@ class GameScene(Scene):
             x, y = self.rotation
             x, y = x + dx * LOOK_SPEED_X, y + dy * LOOK_SPEED_Y
             y = max(-90, min(90, y))
-            self.rotation = (x, y)
+            rotation = (x, y)
+            if self.rotation != rotation:
+                self.rotation = rotation
+                self.frustum_updated = True
 
     def on_key_press(self, symbol, modifiers):
         """Event handler for the Window.on_key_press event.
@@ -686,6 +726,9 @@ class Model(object):
 
         # Mapping from sector to a list of positions inside that sector.
         self.sectors = {}
+
+        # Actual set of shown sectors
+        self.shown_sectors = set({})
 
         #self.generate_world = generate_world(self) 
         
@@ -866,6 +909,8 @@ class Model(object):
         drawn to the canvas.
 
         """
+        self.shown_sectors.add(sector)
+
         if self.generator is not None and sector not in self.sectors:
             self.generator.generate(sector)
 
@@ -878,30 +923,19 @@ class Model(object):
         removed from the canvas.
 
         """
+        self.shown_sectors.discard(sector)
+
         for position in self.sectors.get(sector, []):
             if position in self.shown:
                 self.hide_block(position, False)
 
-    def change_sectors(self, before, after):
-        """ Move from sector `before` to sector `after`. A sector is a
-        contiguous x, y sub-region of world. Sectors are used to speed up
-        world rendering.
+    def show_only_sectors(self, sectors):
+        """ Update the shown sectors.
 
+        Show the ones which are not part of the list, and hide the others.
         """
-        before_set = set()
-        after_set = set()
-        pad = 4
-        for dx in range(-pad, pad + 1):
-            for dy in [0]:  # range(-pad, pad + 1):
-                for dz in range(-pad, pad + 1):
-                    if dx ** 2 + dy ** 2 + dz ** 2 > (pad + 1) ** 2:
-                        continue
-                    if before:
-                        x, y, z = before
-                        before_set.add((x + dx, y + dy, z + dz))
-                    if after:
-                        x, y, z = after
-                        after_set.add((x + dx, y + dy, z + dz))
+        after_set = set(sectors)
+        before_set = self.shown_sectors
         show = after_set - before_set
         hide = before_set - after_set
         for sector in show:

@@ -33,6 +33,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 import pyglet
+import os.path
 
 from game.graphics import *
 from game.scenemanager import SceneManager
@@ -40,7 +41,9 @@ from game.scenemanager import SceneManager
 
 def main():
     # The pyglet.resource module handles efficient loading of assets:
-    pyglet.resource.path = ['assets', 'assets/images', 'assets/sounds']
+    path = ['assets', 'assets/images', 'assets/sounds']
+    path = [os.path.abspath(p) for p in path]
+    pyglet.resource.path = path
     pyglet.resource.reindex()
 
     # Create the main game Window, and set it's icon:

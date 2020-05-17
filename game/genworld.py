@@ -48,6 +48,9 @@ class WorldGenerator:
         """If True the generator uses a procedural generation for the map.
         Else, a flat floor will be generated."""
 
+        self.y = 0
+        """Initial y height"""
+
         self.cloudiness = 0.35
         """The cloudiness can be custom to change the about of clouds generated.
         0 means blue sky, and 1 means white sky."""
@@ -58,6 +61,12 @@ class WorldGenerator:
         self.enclosure = True
         """If true the world is limited to a fixed size, else the world is infinitely
         generated."""
+
+        self.enclosure_size = 80
+        """1/2 width (in x and z) of the enclosure"""
+
+        self.enclosure_height = 12
+        """Enclosure height, if generated"""
 
         self.lookup_terrain = []
         def add_terrain_map(height, terrains):
@@ -111,23 +120,24 @@ class WorldGenerator:
 
     def generate(self, sector):
         """Generate a specific sector of the world and place all the blocks"""
-        n = 80  # 1/2 width and height of world
-        y = 0  # initial y height
 
-        self._generate_enclosure(sector, y_pos=y - 2, height=12, half_size=n)
+        self._generate_enclosure(sector)
         if self.hills_enabled:
-            self._generate_random_map(sector, y_pos=y - 2, half_size=n)
+            self._generate_random_map(sector)
         else:
-            self._generate_floor(y_pos=y - 2, half_size=n)
+            self._generate_floor(sector)
         if self.cloudiness > 0:
-            self._generate_clouds(sector, y_pos=y + 20, half_size=n + 20)
+            self._generate_clouds(sector)
         if self.nb_trees > 0:
-            self._generate_trees(sector, y_pos=y - 2, half_size=n - 3)
+            self._generate_trees(sector)
 
-    def _generate_enclosure(self, sector, y_pos, height, half_size):
+    def _generate_enclosure(self, sector):
         """Generate an enclosure with unbreakable blocks on the floor and
         and on the side.
         """
+        y_pos = self.y - 2
+        height = self.enclosure_height=12
+        half_size = self.enclosure_size
         n = half_size
         for x, z in self._iter_xz(sector):
             if x < -n or x > n or z < -n or z > n:
@@ -142,18 +152,19 @@ class WorldGenerator:
                     for dy in range(height):
                         self.model.add_block((x, y_pos + dy, z), BEDSTONE, immediate=False)
 
-    def _generate_floor(self, sector, y_pos, half_size):
+    def _generate_floor(self, sector):
         """Generate a standard floor at a specific height"""
+        y_pos= self.y - 2
+        n = self.enclosure_size
         for x, z in self._iter_xz(sector):
             if self.enclosure:
-                if x <= -half_size or x >= half_size - 1:
-                    continue
-                if z <= -half_size or z >= half_size - 1:
+                if x <= -n or x >= n - 1 or z <= -n or z >= n - 1:
                     continue
             self.model.add_block((x, y_pos, z), DIRT_WITH_GRASS, immediate=False)
 
-    def _generate_random_map(self, sector, y_pos, half_size):
-        n = half_size
+    def _generate_random_map(self, sector):
+        n = self.enclosure_size
+        y_pos = self.y - 2
         octaves = 4
         freq = 38
         for x, z in self._iter_xz(sector):
@@ -169,7 +180,7 @@ class WorldGenerator:
                 block = terrains[-1-i] if i < len(terrains) else terrains[0]
                 self.model.add_block((x, y_pos+nb_block-i, z), block, immediate=False)
 
-    def _generate_trees(self, sector, y_pos, half_size):
+    def _generate_trees(self, sector):
         """Generate trees in the map
 
         For now it do not generate trees between 2 sectors, and use rand
@@ -185,7 +196,8 @@ class WorldGenerator:
 
         random.seed(sector[0] + sector[2])
         nb_trees = random.randint(0, self.nb_trees)
-        n = half_size
+        n = self.enclosure_size - 3
+        y_pos = self.y - 2
 
         for _ in range(nb_trees):
             x = sector[0] * utilities.SECTOR_SIZE + 3 + random.randint(0, utilities.SECTOR_SIZE-7)
@@ -287,10 +299,11 @@ class WorldGenerator:
             self.model.add_block((x, y + y_tree, z + 3), LEAVES, immediate=False)
             self.model.add_block((x, y + y_tree, z - 3), LEAVES, immediate=False)
 
-    def _generate_clouds(self, sector, y_pos, half_size):
+    def _generate_clouds(self, sector):
         """Generate clouds at this `height` and covering this `half_size`
         centered to 0.
         """
+        y_pos = self.y + 20
         octaves = 3
         freq = 20
         for x, z in self._iter_xz(sector):

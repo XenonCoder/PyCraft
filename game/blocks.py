@@ -79,7 +79,6 @@ class Block:
             self.numeric_tex_coords[2][0]*16,self.numeric_tex_coords[2][1]*16, 16, 16)
         return block_image
 
-
 DIRT = Block('dirt', ((0, 1), (0, 1), (0, 1)))
 DIRT_WITH_GRASS = Block('dirt_with_grass', ((1, 0), (0, 1), (0, 0)))
 SAND = Block('sand', ((1, 1), (1, 1), (1, 1)))
@@ -89,8 +88,11 @@ BRICK = Block('brick', ((3, 1), (3, 1), (3, 1)))
 BEDSTONE = Block('bedstone', ((2, 1), (2, 1), (2, 1)))
 TREE = Block('tree', ((1, 2), (1, 2), (0, 2)))
 LEAVES = Block('leaves', ((2, 2), (2, 2), (2, 2)))
-SNOW = Block('snow', ((1, 3), (0, 1), (0, 3)))
+SNOW = Block('snow', ((1, 3), (1, 3), (1, 3)))
 WOODEN_PLANKS = Block('wooden_planks', ((2, 3), (2, 3), (2, 3)))
+CLOUD = Block('snow', ((1, 3), (1, 3), (1, 3)))
+DIRT_WITH_SNOW = Block('dirt_with_snow', ((1, 3), (0, 1), (0, 3)))
+WATER = Block('dirt', ((3, 2), (3, 2), (3, 2)))
 
 # A reference to the 6 faces (sides) of the blocks:
 FACES = [(0, 1, 0), (0, -1, 0), (-1, 0, 0), (1, 0, 0), (0, 0, 1), (0, 0, -1)]

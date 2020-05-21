@@ -60,7 +60,7 @@ FLYING = False
 HOTBAR_SIZE = 5
 INVENTORY_MARGIN = 16
 HIGHLIGHT_PADDING = 8
-PREVIEW_SIZE = 96 # Can only be adjusted in steps of 16
+PREVIEW_SIZE = 90
 
 # Look speed
 LOOK_SPEED_X = 0.15

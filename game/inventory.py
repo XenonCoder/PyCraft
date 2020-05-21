@@ -84,7 +84,7 @@ class Inventory(object):
 
         # List of all Blocks in the Game
         self.block_list = [DIRT, DIRT_WITH_GRASS, SAND, SNOW, COBBLESTONE,
-                          BRICK_COBBLESTONE, BRICK, TREE, LEAVES, WOODEN_PLANKS]
+                          BRICK_COBBLESTONE, BRICK, TREE, LEAVES, WOODEN_PLANKS, CLOUD, DIRT_WITH_SNOW, WATER]
 
         # List of Blockt currently in hotbar
         self._hotbar = self.block_list[:HOTBAR_SIZE]

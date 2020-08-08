@@ -66,5 +66,5 @@ def sectorize(position):
     :param position: tuple of len 3
     :return: tuple of len 3 representing the sector
     """
-    x, y, z = normalize(position)
-    return x//SECTOR_SIZE, 0, z//SECTOR_SIZE
+    x, y, z = position
+    return int(x) // SECTOR_SIZE, int(y) // SECTOR_SIZE, int(z) // SECTOR_SIZE

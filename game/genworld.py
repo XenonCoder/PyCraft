@@ -37,38 +37,14 @@ import random
 from .blocks import *
 from .utilities import *
 from game import utilities
-from libs import perlin
-
-
-noise = perlin.SimplexNoise()
-
-
-class Chunk:
-    """A chunk of the world, with some helpers"""
-
-    def __init__(self, sector):
-        self.blocks = {}
-
-        self.sector = sector
-        assert sector[1] == 0
-        """For now a chunk is infinite vertically"""
-
-    def empty(self, pos):
-        return pos not in self.blocks
-
-    def __setitem__(self, pos, value):
-        self.blocks[pos] = value
-
-    def __getitem__(self, pos):
-        return self.blocks[pos]
+from .noise import Noise
+from .world import Sector
 
 
 class WorldGenerator:
     """Generate a world model"""
 
-    def __init__(self, model):
-        self.model = model
-
+    def __init__(self):
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         """This thread pool will execute one task at a time. Others are stacked,
         waiting for execution."""
@@ -80,15 +56,21 @@ class WorldGenerator:
         """If True the generator uses a procedural generation for the map.
         Else, a flat floor will be generated."""
 
-        self.y = 0
+        self.y = 4
         """Initial y height"""
 
         self.cloudiness = 0.35
         """The cloudiness can be custom to change the about of clouds generated.
         0 means blue sky, and 1 means white sky."""
 
-        self.nb_trees = 3
+        self.y_cloud = self.y + 20
+        """y-position of the clouds."""
+
+        self.nb_trees = 6
         """Max number of trees to generate per sectors"""
+
+        self.tree_chunk_size = 32
+        """The number of tree will be generated in this chunk size (in block)"""
 
         self.enclosure = True
         """If true the world is limited to a fixed size, else the world is infinitely
@@ -99,6 +81,20 @@ class WorldGenerator:
 
         self.enclosure_height = 12
         """Enclosure height, if generated"""
+
+        self.terrain_gen = Noise(frequency=1 / (38 * 256), octaves=4)
+        """Raw generator used to create the terrain"""
+
+        self.cloud_gen = Noise(frequency=1 / (20 * 256), octaves=3)
+        """Raw generator used to create the clouds"""
+
+        self.gold_gen = Noise(frequency=1 / (64 * 256), octaves=2, persistence=0.1)
+        self.iron_gen = Noise(frequency=1 / (32 * 256), octaves=2, persistence=0.1)
+        self.coal_gen = Noise(frequency=1 / (16 * 256), octaves=2, persistence=0.1)
+        """Raw generator for ore"""
+
+        self.terrain_gen.randomize()
+        self.cloud_gen.randomize()
 
         self.lookup_terrain = []
 
@@ -160,20 +156,31 @@ class WorldGenerator:
         future = self.executor.submit(self.generate, sector)
         future.add_done_callback(send_result)
 
-    def _iter_xz(self, sector):
-        """Iter all the xz block position from a sector"""
-        sx, _sy, sz = sector
-        for x in range(sx * SECTOR_SIZE, (sx + 1) * SECTOR_SIZE):
-            for z in range(sz * SECTOR_SIZE, (sz + 1) * SECTOR_SIZE):
+    def _iter_xz(self, chunk):
+        """Iterate all the xz block positions from a sector"""
+        xmin, _, zmin = chunk.min_block
+        xmax, _, zmax = chunk.max_block
+        for x in range(xmin, xmax):
+            for z in range(zmin, zmax):
                 yield x, z
+
+    def _iter_xyz(self, chunk):
+        """Iterate all the xyz block positions from a sector"""
+        xmin, ymin, zmin = chunk.min_block
+        xmax, ymax, zmax = chunk.max_block
+        for x in range(xmin, xmax):
+            for y in range(ymin, ymax):
+                for z in range(zmin, zmax):
+                    yield x, y, z
 
     def generate(self, sector):
         """Generate a specific sector of the world and place all the blocks"""
 
-        chunk = Chunk(sector)
+        chunk = Sector(sector)
         """Store the content of this sector"""
 
-        self._generate_enclosure(chunk)
+        if self.enclosure:
+            self._generate_enclosure(chunk)
         if self.hills_enabled:
             self._generate_random_map(chunk)
         else:
@@ -182,6 +189,8 @@ class WorldGenerator:
             self._generate_clouds(chunk)
         if self.nb_trees > 0:
             self._generate_trees(chunk)
+        if not self.enclosure:
+            self._generate_underworld(chunk)
 
         return chunk
 
@@ -191,47 +200,61 @@ class WorldGenerator:
         """
         y_pos = self.y - 2
         height = self.enclosure_height
+        if not chunk.contains_y_range(y_pos, y_pos + height):
+            # Early break, there is no enclosure here
+            return
+
+        y_pos = self.y - 2
         half_size = self.enclosure_size
         n = half_size
-        for x, z in self._iter_xz(chunk.sector):
+        for x, z in self._iter_xz(chunk):
             if x < -n or x > n or z < -n or z > n:
                 continue
             # create a layer stone an DIRT_WITH_GRASS everywhere.
-            chunk[(x, y_pos, z)] = BEDSTONE
+            pos = (x, y_pos, z)
+            chunk.add_block(pos, BEDSTONE)
 
-            if self.enclosure:
-                # create outer walls.
-                # Setting values for the Bedrock (depth, and height of the perimeter wall).
-                if x in (-n, n) or z in (-n, n):
-                    for dy in range(height):
-                        chunk[(x, y_pos + dy, z)] = BEDSTONE
+            # create outer walls.
+            # Setting values for the Bedrock (depth, and height of the perimeter wall).
+            if x in (-n, n) or z in (-n, n):
+                for dy in range(height):
+                    pos = (x, y_pos + dy, z)
+                    chunk.add_block(pos, BEDSTONE)
 
     def _generate_floor(self, chunk):
         """Generate a standard floor at a specific height"""
         y_pos = self.y - 2
+        if not chunk.contains_y(y_pos):
+            # Early break, there is no clouds here
+            return
         n = self.enclosure_size
-        for x, z in self._iter_xz(chunk.sector):
+        for x, z in self._iter_xz(chunk):
             if self.enclosure:
-                if x <= -n or x >= n - 1 or z <= -n or z >= n - 1:
+                if x <= -n or x >= n or z <= -n or z >= n:
                     continue
-            chunk[(x, y_pos, z)] = DIRT_WITH_GRASS
+            chunk.add_block((x, y_pos, z), DIRT_WITH_GRASS)
+
+    def _get_biome(self, x, z):
+        c = self.terrain_gen.noise2(x, z)
+        c = int((c + 1) * 0.5 * len(self.lookup_terrain))
+        if c < 0:
+            c = 0
+        nb_block, terrains = self.lookup_terrain[c]
+        return nb_block, terrains
 
     def _generate_random_map(self, chunk):
         n = self.enclosure_size
         y_pos = self.y - 2
-        freq = 38
-        for x, z in self._iter_xz(chunk.sector):
+        if not chunk.contains_y_range(y_pos, y_pos + 20):
+            return
+        for x, z in self._iter_xz(chunk):
             if self.enclosure:
-                if x <= -n or x >= n - 1 or z <= -n or z >= n - 1:
+                if x <= -n or x >= n or z <= -n or z >= n:
                     continue
-            c = noise.noise2(x / freq, z / freq)
-            c = int((c + 1) * 0.5 * len(self.lookup_terrain))
-            if c < 0:
-                c = 0
-            nb_block, terrains = self.lookup_terrain[c]
+            nb_block, terrains = self._get_biome(x, z)
             for i in range(nb_block):
                 block = terrains[-1-i] if i < len(terrains) else terrains[0]
-                chunk[(x, y_pos + nb_block - i, z)] = block
+                chunk.add_block((x, y_pos + nb_block - i, z), block)
 
     def _generate_trees(self, chunk):
         """Generate trees in the map
@@ -239,35 +262,41 @@ class WorldGenerator:
         For now it do not generate trees between 2 sectors, and use rand
         instead of a procedural generation.
         """
+        if not chunk.contains_y_range(self.y, self.y + 20):
+            return
 
-        def get_biome(chunk, x, y, z):
+        def get_biome(x, y, z):
             """Return the biome at a location of the map plus the first empty place."""
-            # This loop could be removed using procedural height map
-            while not chunk.empty((x, y, z)):
-                y = y + 1
-            block = chunk[x, y - 1, z]
+            nb_block, terrains = self._get_biome(x, z)
+            y = self.y - 2 + nb_block
+            block = terrains[-1]
             return block, y
 
-        sector = chunk.sector
-        random.seed(sector[0] + sector[2])
+        sector_pos = chunk.position
+        # Common root for many chunks
+        # So what it is easier to generate trees between 2 chunks
+        sector_root_x = (sector_pos[0] * SECTOR_SIZE // self.tree_chunk_size) * self.tree_chunk_size
+        sector_root_z = (sector_pos[2] * SECTOR_SIZE // self.tree_chunk_size) * self.tree_chunk_size
+        random.seed(sector_root_x + sector_root_z)
+
         nb_trees = random.randint(0, self.nb_trees)
         n = self.enclosure_size - 3
         y_pos = self.y - 2
 
         for _ in range(nb_trees):
-            x = sector[0] * utilities.SECTOR_SIZE + 3 + random.randint(0, utilities.SECTOR_SIZE - 7)
-            z = sector[2] * utilities.SECTOR_SIZE + 3 + random.randint(0, utilities.SECTOR_SIZE - 7)
+            x = sector_root_x + 3 + random.randint(0, self.tree_chunk_size - 7)
+            z = sector_root_z + 3 + random.randint(0, self.tree_chunk_size - 7)
             if self.enclosure:
                 if x < -n + 2 or x > n - 2 or z < -n + 2 or z > n - 2:
                     continue
 
-            biome, start_pos = get_biome(chunk, x, y_pos + 1, z)
+            biome, start_pos = get_biome(x, y_pos + 1, z)
             if biome not in [DIRT, DIRT_WITH_GRASS, SAND]:
                 continue
             if biome == SAND:
                 height = random.randint(4, 5)
                 self._create_coconut_tree(chunk, x, start_pos, z, height)
-            elif start_pos > 6:
+            elif start_pos - self.y > 6:
                 height = random.randint(3, 5)
                 self._create_fir_tree(chunk, x, start_pos, z, height)
             else:
@@ -275,16 +304,16 @@ class WorldGenerator:
                 self._create_default_tree(chunk, x, start_pos, z, height)
 
     def _create_plus(self, chunk, x, y, z, block):
-        chunk[(x, y, z)] = block
-        chunk[(x - 1, y, z)] = block
-        chunk[(x + 1, y, z)] = block
-        chunk[(x, y, z - 1)] = block
-        chunk[(x, y, z + 1)] = block
+        chunk.add_block((x, y, z), block)
+        chunk.add_block((x - 1, y, z), block)
+        chunk.add_block((x + 1, y, z), block)
+        chunk.add_block((x, y, z - 1), block)
+        chunk.add_block((x, y, z + 1), block)
 
     def _create_box(self, chunk, x, y, z, block):
         for i in range(9):
             dx, dz = i // 3 - 1, i % 3 - 1
-            chunk[(x + dx, y, z + dz)] = block
+            chunk.add_block((x + dx, y, z + dz), block)
 
     def _create_default_tree(self, chunk, x, y, z, height):
         if height == 0:
@@ -293,13 +322,13 @@ class WorldGenerator:
             self._create_plus(x, y, z, LEAVES)
             return
         if height == 2:
-            chunk[(x, y, z)] = TREE
-            chunk[(x, y + 1, z)] = LEAVES
+            chunk.add_block((x, y, z), TREE)
+            chunk.add_block((x, y + 1, z), LEAVES)
             return
         y_tree = 0
         root_height = 2 if height >= 4 else 1
         for _ in range(root_height):
-            chunk[(x, y + y_tree, z)] = TREE
+            chunk.add_block((x, y + y_tree, z), TREE)
             y_tree += 1
         self._create_plus(chunk, x, y + y_tree, z, LEAVES)
         y_tree += 1
@@ -315,52 +344,82 @@ class WorldGenerator:
             self._create_plus(chunk, x, y, z, LEAVES)
             return
         if height == 2:
-            chunk[(x, y, z)] = TREE
-            chunk[(x, y + 1, z)] = LEAVES
+            chunk.add_block((x, y, z), TREE)
+            chunk.add_block((x, y + 1, z), LEAVES)
             return
         y_tree = 0
-        chunk[(x, y + y_tree, z)] = TREE
+        chunk.add_block((x, y + y_tree, z), TREE)
         y_tree += 1
         self._create_box(chunk, x, y + y_tree, z, LEAVES)
-        chunk[(x, y + y_tree, z)] = TREE
+        chunk.add_block((x, y + y_tree, z), TREE)
         y_tree += 1
         h_layer = (height - 2) // 2
         for _ in range(h_layer):
             self._create_plus(chunk, x, y + y_tree, z, LEAVES)
-            chunk[(x, y + y_tree, z)] = TREE
+            chunk.add_block((x, y + y_tree, z), TREE)
             y_tree += 1
         for _ in range(h_layer):
-            chunk[(x, y + y_tree, z)] = LEAVES
+            chunk.add_block((x, y + y_tree, z), LEAVES)
             y_tree += 1
 
     def _create_coconut_tree(self, chunk, x, y, z, height):
         y_tree = 0
         for _ in range(height - 1):
-            chunk[(x, y + y_tree, z)] = TREE
+            chunk.add_block((x, y + y_tree, z), TREE)
             y_tree += 1
-        chunk[(x + 1, y + y_tree, z)] = LEAVES
-        chunk[(x - 1, y + y_tree, z)] = LEAVES
-        chunk[(x, y + y_tree, z + 1)] = LEAVES
-        chunk[(x, y + y_tree, z - 1)] = LEAVES
+        chunk.add_block((x + 1, y + y_tree, z), LEAVES)
+        chunk.add_block((x - 1, y + y_tree, z), LEAVES)
+        chunk.add_block((x, y + y_tree, z + 1), LEAVES)
+        chunk.add_block((x, y + y_tree, z - 1), LEAVES)
         if height >= 5:
-            chunk[(x + 2, y + y_tree, z)] = LEAVES
-            chunk[(x - 2, y + y_tree, z)] = LEAVES
-            chunk[(x, y + y_tree, z + 2)] = LEAVES
-            chunk[(x, y + y_tree, z - 2)] = LEAVES
+            chunk.add_block((x + 2, y + y_tree, z), LEAVES)
+            chunk.add_block((x - 2, y + y_tree, z), LEAVES)
+            chunk.add_block((x, y + y_tree, z + 2), LEAVES)
+            chunk.add_block((x, y + y_tree, z - 2), LEAVES)
         if height >= 6:
             y_tree -= 1
-            chunk[(x + 3, y + y_tree, z)] = LEAVES
-            chunk[(x - 3, y + y_tree, z)] = LEAVES
-            chunk[(x, y + y_tree, z + 3)] = LEAVES
-            chunk[(x, y + y_tree, z - 3)] = LEAVES
+            chunk.add_block((x + 3, y + y_tree, z), LEAVES)
+            chunk.add_block((x - 3, y + y_tree, z), LEAVES)
+            chunk.add_block((x, y + y_tree, z + 3), LEAVES)
+            chunk.add_block((x, y + y_tree, z - 3), LEAVES)
 
     def _generate_clouds(self, chunk):
-        """Generate clouds at this `height` and covering this `half_size`
-        centered to 0.
+        """Generate clouds at this `self.y_cloud`.
         """
-        y_pos = self.y + 20
-        freq = 20
-        for x, z in self._iter_xz(chunk.sector):
-            c = noise.noise2(x / freq, z / freq)
+        y_pos = self.y_cloud
+        if not chunk.contains_y(y_pos):
+            # Early break, there is no clouds here
+            return
+        for x, z in self._iter_xz(chunk):
+            pos = (x, y_pos, z)
+            if not chunk.empty(pos):
+                continue
+            c = self.cloud_gen.noise2(x, z)
             if (c + 1) * 0.5 < self.cloudiness:
-                chunk[(x, y_pos, z)] = CLOUD
+                chunk.add_block(pos, CLOUD)
+
+    def _get_stone(self, pos):
+        """Returns the expected mineral at a specific location.
+
+        The input location have to be already known as a stone location.
+        """
+        v = self.gold_gen.noise3(*pos)
+        if 0.02 < v < 0.03:
+            return GOLD_ORE
+        v = self.iron_gen.noise3(*pos)
+        if 0.015 < v < 0.03:
+            return IRON_ORE
+        v = self.coal_gen.noise3(*pos)
+        if 0.01 < v < 0.03:
+            return COAL_ORE
+        return STONE
+
+    def _generate_underworld(self, chunk):
+        if chunk.min_block[1] > self.y - 3:
+            return
+        for x, y, z in self._iter_xyz(chunk):
+            if y > self.y - 2:
+                continue
+            pos = x, y, z
+            block = self._get_stone(pos)
+            chunk.add_block(pos, block)

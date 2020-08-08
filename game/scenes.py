@@ -31,7 +31,6 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
-import random
 import time
 import pyglet
 import os
@@ -50,6 +49,7 @@ from .inventory import *
 from .utilities import *
 from .graphics import BlockGroup
 from .genworld import WorldGenerator
+from .world import Model
 
 
 class AudioEngine:
@@ -232,7 +232,7 @@ class GameScene(Scene):
 
         # Current (x, y, z) position in the world, specified with floats. Note
         # that, perhaps unlike in math class, the y-axis is the vertical axis.
-        self.position = (SECTOR_SIZE // 2, 0, SECTOR_SIZE // 2)
+        self.position = (SECTOR_SIZE // 2, 6, SECTOR_SIZE // 2)
 
         # First element is rotation of the player in the x-z plane (ground
         # plane) measured from the z-axis down. The second is the rotation
@@ -244,9 +244,6 @@ class GameScene(Scene):
 
         # Which sector the player is currently in.
         self.sector = None
-
-        self.received_sectors = []
-        # Channel for data received from the the world generator
 
         # True if the location of the camera have changed between an update
         self.frustum_updated = False
@@ -358,6 +355,31 @@ class GameScene(Scene):
             dz = 0.0
         return dx, dy, dz
 
+    def init_player_on_summit(self):
+        """Make sure the sector containing the actor is loaded and the player is on top of it.
+        """
+        generator = self.model.generator
+        x, y, z = self.position
+        free_height = 0
+        limit = 100
+        while free_height < PLAYER_HEIGHT and limit:
+            pos = x , y, z
+            sector_position = sectorize(pos)
+            if sector_position not in self.model.sectors:
+                sector = generator.generate(sector_position)
+                self.model.register_sector(sector)
+            if self.model.empty(pos):
+                free_height += 1
+            else:
+                free_height = 0
+            y = y + 1
+            limit -= 1
+
+        position = x, y - PLAYER_HEIGHT + 1, z
+        if self.position != position:
+            self.position = position
+            self.frustum_updated = True
+
     def update(self, dt):
         """ This method is scheduled to be called repeatedly by the pyglet
         clock.
@@ -368,10 +390,6 @@ class GameScene(Scene):
             The change in time since the last call.
 
         """
-        if self.received_sectors:
-            chunk = self.received_sectors.pop(0)
-            self.model.feed_chunk(chunk)
-
         if not self.initialized:
             self.set_exclusive_mouse(True)
 
@@ -381,24 +399,11 @@ class GameScene(Scene):
                 has_save = self.scene_manager.save.load_world(self.model)
 
             if not has_save:
-                generator = WorldGenerator(self.model)
-                generator.set_callback(self.on_sector_received)
+                generator = WorldGenerator()
+                generator.y = self.position[1]
                 generator.hills_enabled = HILLS_ON
                 self.model.generator = generator
-
-                # Make sure the sector containing the actor is loaded
-                sector = sectorize(self.position)
-                chunk = generator.generate(sector)
-                self.model.feed_chunk(chunk)
-
-                # Move the actor above the terrain
-                while not self.model.empty(self.position):
-                    x, y, z = self.position
-                    position = x, y + 1, z
-                    if self.position != position:
-                        self.position = position
-                        self.frustum_updated = True
-
+                self.init_player_on_summit()
 
             self.initialized = True
 
@@ -415,17 +420,6 @@ class GameScene(Scene):
         self.inventory.update(dt)
         for _ in range(m):
             self._update(dt / m)
-
-    def on_sector_received(self, chunk):
-        """Called when a part of the world is returned.
-
-        This is not executed by the main thread. So the result have to be passed
-        to the main thread.
-        """
-        self.received_sectors.append(chunk)
-        # Reduce the load of the main thread by delaying the
-        # computation between 2 chunks
-        time.sleep(0.1)
 
     def _update(self, dt):
         """ Private implementation of the `update()` method. This is where most
@@ -454,8 +448,7 @@ class GameScene(Scene):
         # collisions
         x, y, z = self.position
         x, y, z = self.collide((x + dx, y + dy, z + dz), PLAYER_HEIGHT)
-        # fix bug for jumping outside the wall and falling to infinity.
-        y = max(-1.25, y)
+
         position = (x, y, z)
         if self.position != position:
             self.position = position
@@ -497,7 +490,7 @@ class GameScene(Scene):
                     op = list(np)
                     op[1] -= dy
                     op[i] += face[i]
-                    if tuple(op) not in self.model.world:
+                    if self.model.empty(tuple(op), must_be_loaded=True):
                         continue
                     p[i] -= (d - pad) * face[i]
                     if face == (0, -1, 0) or face == (0, 1, 0):
@@ -505,6 +498,25 @@ class GameScene(Scene):
                         # falling / rising.
                         self.dy = 0
                     break
+
+        generator = self.model.generator
+        if generator is None:
+            # colliding with the virtual floor
+            # to avoid to fall infinitely.
+            p[1] = max(-1.25, p[1])
+        else:
+            if generator.enclosure:
+                # Force the player inside the enclosure
+                s = generator.enclosure_size
+                if p[0] < -s:
+                    p[0] = -s
+                elif p[0] > s:
+                    p[0] = s
+                if p[2] < -s:
+                    p[2] = -s
+                elif p[2] > s:
+                    p[2] = s
+
         return tuple(p)
 
     def update_shown_sectors(self, position, rotation):
@@ -521,13 +533,13 @@ class GameScene(Scene):
             return
 
         sectors_to_show = []
-        pad = 4
+        pad = int(FOG_END) // SECTOR_SIZE
         for dx in range(-pad, pad + 1):
-            for dy in [0]:  # range(-pad, pad + 1):
+            for dy in range(-pad, pad + 1):
                 for dz in range(-pad, pad + 1):
                     # Manathan distance
-                    dist = abs(dx) + abs(dz)
-                    if dist > pad + 2:
+                    dist = abs(dx) + abs(dy) + abs(dz)
+                    if dist > pad + pad // 2:
                         # Skip sectors outside of the sphere of radius pad+1
                         continue
                     x, y, z = sector
@@ -565,9 +577,9 @@ class GameScene(Scene):
                 if button == mouse.RIGHT or (button == mouse.LEFT and modifiers & key.MOD_CTRL):
                     # ON OSX, control + left click = right click.
                     if previous:
-                        self.model.add_block(previous, self.inventory.get_selected_block())
+                        self.model.add_block(previous, self.block)
                 elif button == pyglet.window.mouse.LEFT and block:
-                    texture = self.model.world[block]
+                    texture = self.model.get_block(block)
                     if texture != BEDSTONE:
                         self.model.remove_block(block)
                         self.audio.play(self.destroy_sfx)
@@ -696,6 +708,8 @@ class GameScene(Scene):
             self.running = False
         elif symbol == key.LSHIFT:
             self.dy = 0
+        elif symbol == key.P:
+            breakpoint()
 
     def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
         if self.inventory.is_inventory_open:
@@ -735,13 +749,17 @@ class GameScene(Scene):
             if self.toggleLabel:
                 self.draw_label()
 
+    def get_focus_block(self):
+        vector = self.get_sight_vector()
+        block = self.model.hit_test(self.position, vector)[0]
+        return block
+
     def draw_focused_block(self):
         """ Draw black edges around the block that is currently under the
         crosshairs.
 
         """
-        vector = self.get_sight_vector()
-        block = self.model.hit_test(self.position, vector)[0]
+        block = self.get_focus_block()
         if block:
             x, y, z = block
             self.highlight.vertices[:] = cube_vertices(x, y, z, 0.51)
@@ -754,300 +772,14 @@ class GameScene(Scene):
 
         """
         x, y, z = self.position
-        self.info_label.text = 'Selected Block = %s : COORDS = [%.2f, %.2f, %.2f] : %d / %d : FPS = [%02d]' % (
-            self.inventory.get_selected_block().name,
-            x, y, z, self.model.currently_shown, len(self.model.world),
-            pyglet.clock.get_fps())
+        elements = []
+        elements.append("FPS = [%02d]" % pyglet.clock.get_fps())
+        elements.append("COORDS = [%.2f, %.2f, %.2f]" % (x, y, z))
+        elements.append("SECTORS = %d [+%d]" % (len(self.model.sectors), len(self.model.requested)))
+        elements.append("BLOCKS = %d" % self.model.count_blocks())
+        self.info_label.text = ' : '.join(elements)
 
-        # Calculating debug label width and updating its background accordingly (width/height ratio for Arial=0.52 so we multiply with 1.52)
-        self.debug_background.width =  int(len(self.info_label.text)*INFO_LABEL_FONTSIZE/1.52)
         self.debug_batch.draw()
-
-
-class Model(object):
-    def __init__(self, batch, group):
-        self.batch = batch
-
-        self.group = group
-
-        # A mapping from position to the texture of the block at that position.
-        # This defines all the blocks that are currently in the world.
-        self.world = {}
-
-        # Procedural generator
-        self.generator = None
-
-        # Same mapping as `world` but only contains blocks that are shown.
-        self.shown = {}
-
-        # Mapping from position to a pyglet `VertextList` for all shown blocks.
-        self._shown = {}
-
-        # Mapping from sector to a list of positions inside that sector.
-        self.sectors = {}
-
-        # Actual set of shown sectors
-        self.shown_sectors = set({})
-
-        #self.generate_world = generate_world(self) 
-        
-        # Simple function queue implementation. The queue is populated with
-        # _show_block() and _hide_block() calls
-        self.queue = deque()
-
-    @property
-    def currently_shown(self):
-        return len(self._shown)
-
-    def hit_test(self, position, vector, max_distance=NODE_SELECTOR):
-        """ Line of sight search from current position. If a block is
-        intersected it is returned, along with the block previously in the line
-        of sight. If no block is found, return None, None.
-
-        Parameters
-        ----------
-        position : tuple of len 3
-            The (x, y, z) position to check visibility from.
-        vector : tuple of len 3
-            The line of sight vector.
-        max_distance : int
-            How many blocks away to search for a hit.
-
-        """
-        m = 8
-        x, y, z = position
-        dx, dy, dz = vector
-        previous = None
-        for _ in range(max_distance * m):
-            checked_position = normalize((x, y, z))
-            if checked_position != previous and checked_position in self.world:
-                return checked_position, previous
-            previous = checked_position
-            x, y, z = x + dx / m, y + dy / m, z + dz / m
-        return None, None
-
-    def empty(self, position):
-        """ Returns True if given `position` does not contain block.
-        """
-        return not position in self.world
-
-    def exposed(self, position):
-        """ Returns False if given `position` is surrounded on all 6 sides by
-        blocks, True otherwise.
-
-        """
-        x, y, z = position
-        for dx, dy, dz in FACES:
-            if (x + dx, y + dy, z + dz) not in self.world:
-                return True
-        return False
-
-    def add_block(self, position, block, immediate=True):
-        """ Add a block with the given `texture` and `position` to the world.
-
-        Parameters
-        ----------
-        position : tuple of len 3
-            The (x, y, z) position of the block to add.
-        block : Block object
-            An instance of the Block class.
-        immediate : bool
-            Whether or not to draw the block immediately.
-
-        """
-        if position in self.world:
-            self.remove_block(position, immediate)
-        self.world[position] = block
-        self.sectors.setdefault(sectorize(position), []).append(position)
-        if immediate:
-            if self.exposed(position):
-                self.show_block(position)
-            self.check_neighbors(position)
-
-    def remove_block(self, position, immediate=True):
-        """ Remove the block at the given `position`.
-
-        Parameters
-        ----------
-        position : tuple of len 3
-            The (x, y, z) position of the block to remove.
-        immediate : bool
-            Whether or not to immediately remove block from canvas.
-
-        """
-        del self.world[position]
-        self.sectors[sectorize(position)].remove(position)
-        if immediate:
-            if position in self.shown:
-                self.hide_block(position)
-            self.check_neighbors(position)
-
-    def check_neighbors(self, position):
-        """ Check all blocks surrounding `position` and ensure their visual
-        state is current. This means hiding blocks that are not exposed and
-        ensuring that all exposed blocks are shown. Usually used after a block
-        is added or removed.
-
-        """
-        x, y, z = position
-        for dx, dy, dz in FACES:
-            neighbor = (x + dx, y + dy, z + dz)
-            if neighbor not in self.world:
-                continue
-            if self.exposed(neighbor):
-                if neighbor not in self.shown:
-                    self.show_block(neighbor)
-            else:
-                if neighbor in self.shown:
-                    self.hide_block(neighbor)
-
-    def show_block(self, position, immediate=True):
-        """ Show the block at the given `position`. This method assumes the
-        block has already been added with add_block()
-
-        Parameters
-        ----------
-        position : tuple of len 3
-            The (x, y, z) position of the block to show.
-        immediate : bool
-            Whether or not to show the block immediately.
-
-        """
-        block = self.world[position]
-        self.shown[position] = block
-        if immediate:
-            self._show_block(position, block)
-        else:
-            self._enqueue(self._show_block, position, block)
-
-    def _show_block(self, position, block):
-        """ Private implementation of the `show_block()` method.
-
-        Parameters
-        ----------
-        position : tuple of len 3
-            The (x, y, z) position of the block to show.
-        block : Block instance
-            An instance of the Block class
-
-        """
-        x, y, z = position
-        vertex_data = cube_vertices(x, y, z, 0.5)
-        # create vertex list
-        # FIXME Maybe `add_indexed()` should be used instead
-        self._shown[position] = self.batch.add(24, GL_QUADS, self.group,
-                                               ('v3f/static', vertex_data),
-                                               ('t2f/static', block.tex_coords))
-
-    def hide_block(self, position, immediate=True):
-        """ Hide the block at the given `position`. Hiding does not remove the
-        block from the world.
-
-        Parameters
-        ----------
-        position : tuple of len 3
-            The (x, y, z) position of the block to hide.
-        immediate : bool
-            Whether or not to immediately remove the block from the canvas.
-
-        """
-        self.shown.pop(position)
-        if immediate:
-            self._hide_block(position)
-        else:
-            self._enqueue(self._hide_block, position)
-
-    def _hide_block(self, position):
-        """ Private implementation of the 'hide_block()` method.
-
-        """
-        block = self._shown.pop(position, None)
-        if block:
-            block.delete()
-
-    def feed_chunk(self, chunk):
-        """Add a chunk of the world to the model.
-        """
-        shown = chunk.sector in self.shown_sectors
-        for position, block in chunk.blocks.items():
-            self.add_block(position, block, immediate=False)
-            if shown:
-                self.show_block(position, immediate=False)
-
-    def show_sector(self, sector):
-        """ Ensure all blocks in the given sector that should be shown are
-        drawn to the canvas.
-
-        """
-        self.shown_sectors.add(sector)
-
-        if sector not in self.sectors:
-            if self.generator is not None:
-                # This sector is about to be loaded
-                self.sectors[sector] = []
-                self.generator.request_sector(sector)
-                return
-
-        for position in self.sectors.get(sector, []):
-            if position not in self.shown and self.exposed(position):
-                self.show_block(position, False)
-
-    def hide_sector(self, sector):
-        """ Ensure all blocks in the given sector that should be hidden are
-        removed from the canvas.
-
-        """
-        self.shown_sectors.discard(sector)
-
-        for position in self.sectors.get(sector, []):
-            if position in self.shown:
-                self.hide_block(position, False)
-
-    def show_only_sectors(self, sectors):
-        """ Update the shown sectors.
-
-        Show the ones which are not part of the list, and hide the others.
-        """
-        after_set = set(sectors)
-        before_set = self.shown_sectors
-        hide = before_set - after_set
-        # Use a list to respect the order of the sectors
-        show = [s for s in sectors if s not in before_set]
-        for sector in show:
-            self.show_sector(sector)
-        for sector in hide:
-            self.hide_sector(sector)
-
-    def _enqueue(self, func, *args):
-        """ Add `func` to the internal queue.
-
-        """
-        self.queue.append((func, args))
-
-    def _dequeue(self):
-        """ Pop the top function from the internal queue and call it.
-
-        """
-        func, args = self.queue.popleft()
-        func(*args)
-
-    def process_queue(self):
-        """ Process the entire queue while taking periodic breaks. This allows
-        the game loop to run smoothly. The queue contains calls to
-        _show_block() and _hide_block() so this method should be called if
-        add_block() or remove_block() was called with immediate=False
-
-        """
-        start = time.perf_counter()
-        while self.queue and time.perf_counter() - start < 1.0 / TICKS_PER_SEC:
-            self._dequeue()
-
-    def process_entire_queue(self):
-        """ Process the entire queue with no breaks.
-
-        """
-        while self.queue:
-            self._dequeue()
 
 
 class HelpScene(Scene):

@@ -71,7 +71,7 @@ FOG_START = 20.0
 FOG_END = 60.0
 
 # Size of sectors used to ease block loading.
-SECTOR_SIZE = 16
+SECTOR_SIZE = 8
 
 # Speed
 WALKING_SPEED = 3

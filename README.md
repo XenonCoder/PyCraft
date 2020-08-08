@@ -103,7 +103,14 @@ See the [wiki](https://github.com/XenonLab-Studio/TerraCraft/wiki) for this proj
     - Mouse left-click: remove block
     - Mouse right-click: create block
 
-**Warning! By pressing F12, the previous screenshot is automatically overwritten.**
+### Other
+- F1: Help/Game Menu
+- F2: Toggle GUI
+- F3: Toggle debug Label
+- F5: Save World
+- F12: Take Screenshot
+
+**Screenshots will be saved in new screenshots/ folder!**
 
 ### Quitting
 

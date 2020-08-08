@@ -56,8 +56,10 @@ def main():
     scene_manager = SceneManager(window=window)
     pyglet.clock.schedule_interval(scene_manager.update, 1.0 / TICKS_PER_SEC)
 
-    # Setup some OpenGL settings (from game.graphics), and start the game loop:
+    # Setup some OpenGL settings (from game.graphics):
     setup_opengl()
+
+    #start the game loop:
     pyglet.app.run()
 
 

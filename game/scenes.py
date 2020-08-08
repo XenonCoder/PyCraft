@@ -32,16 +32,20 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 import time
+import pyglet
+import os
 
 from collections import deque
 
 from pyglet.gl import *
 from pyglet.media import Player
+from pyglet.shapes import Rectangle
 from pyglet.window import key, mouse
 from pyglet.sprite import Sprite
 from pyglet.graphics import OrderedGroup
 
 from .blocks import *
+from .inventory import *
 from .utilities import *
 from .graphics import BlockGroup
 from .genworld import WorldGenerator
@@ -194,11 +198,14 @@ class GameScene(Scene):
 
         # A Batch is a collection of vertex lists for batched rendering.
         self.batch = pyglet.graphics.Batch()
+        # Debug Batch gets rendered with all debug infos
+        self.debug_batch = pyglet.graphics.Batch()
 
         # pyglet Groups manages setting/unsetting OpenGL state.
         self.block_group = BlockGroup(
             self.window, pyglet.resource.texture('textures.png'), order=0)
-        self.hud_group = OrderedGroup(order=1)
+        self.hud_background_group = OrderedGroup(order=1)
+        self.hud_group = OrderedGroup(order=2)
 
         # Whether or not the window exclusively captures the mouse.
         self.exclusive = False
@@ -244,12 +251,8 @@ class GameScene(Scene):
         # Velocity in the y (upward) direction.
         self.dy = 0
 
-        # A list of blocks the player can place. Hit num keys to cycle.
-        self.inventory = [DIRT, DIRT_WITH_GRASS, SAND, SNOW, COBBLESTONE,
-                          BRICK_COBBLESTONE, BRICK, TREE, LEAVES, WOODEN_PLANKS]
-
-        # The current block the user can place. Hit num keys to cycle.
-        self.block = self.inventory[0]
+        # Inventory, Managing selected Block and Inventory overlay
+        self.inventory = Inventory(0, window, self.hud_group, self. hud_background_group)
 
         # Convenience list of num keys.
         self.num_keys = [key._1, key._2, key._3, key._4, key._5,
@@ -266,10 +269,17 @@ class GameScene(Scene):
         self.highlight = self.batch.add_indexed(24, GL_LINES, self.block_group, indices,
                                                 'v3f/dynamic', ('c3B', [0]*72))
 
-        # The label that is displayed in the top left of the canvas.
+        # The label that is displayed in the top left of the canvas (also its background).
+        # The Background gets initialized with 0 width, we update its width in draw
         self.info_label = pyglet.text.Label('', font_name='Arial', font_size=INFO_LABEL_FONTSIZE,
                                             x=10, y=self.window.height - 10, anchor_x='left',
-                                            anchor_y='top', color=(0, 0, 0, 255))
+                                            anchor_y='top', color=(255, 255, 255, 255), batch=self.debug_batch, group=self.hud_group)
+
+        self.debug_background = Rectangle(0,
+                self.window.height-INFO_LABEL_FONTSIZE - 20, 0,
+                INFO_LABEL_FONTSIZE + 20, color=(45, 45, 45),
+                batch=self.debug_batch, group=self.hud_background_group)
+        self.debug_background.opacity = 150
 
         # Boolean whether to display loading screen.
         self.initialized = False
@@ -410,6 +420,7 @@ class GameScene(Scene):
 
         m = 8
         dt = min(dt, 0.2)
+        self.inventory.update(dt)
         for _ in range(m):
             self._update(dt / m)
 
@@ -563,17 +574,18 @@ class GameScene(Scene):
 
         """
         if self.exclusive:
-            vector = self.get_sight_vector()
-            block, previous = self.model.hit_test(self.position, vector)
-            if button == mouse.RIGHT or (button == mouse.LEFT and modifiers & key.MOD_CTRL):
-                # ON OSX, control + left click = right click.
-                if previous:
-                    self.model.add_block(previous, self.block)
-            elif button == pyglet.window.mouse.LEFT and block:
-                texture = self.model.get_block(block)
-                if texture != BEDSTONE:
-                    self.model.remove_block(block)
-                    self.audio.play(self.destroy_sfx)
+            if not self.inventory.is_inventory_open:
+                vector = self.get_sight_vector()
+                block, previous = self.model.hit_test(self.position, vector)
+                if button == mouse.RIGHT or (button == mouse.LEFT and modifiers & key.MOD_CTRL):
+                    # ON OSX, control + left click = right click.
+                    if previous:
+                        self.model.add_block(previous, self.inventory.get_selected_block())
+                elif button == pyglet.window.mouse.LEFT and block:
+                    texture = self.model.get_block(block)
+                    if texture != BEDSTONE:
+                        self.model.remove_block(block)
+                        self.audio.play(self.destroy_sfx)
         else:
             self.set_exclusive_mouse(True)
 
@@ -591,7 +603,7 @@ class GameScene(Scene):
             The movement of the mouse.
 
         """
-        if self.exclusive:
+        if self.exclusive and not self.inventory.is_inventory_open:
             x, y = self.rotation
             x, y = x + dx * LOOK_SPEED_X, y + dy * LOOK_SPEED_Y
             y = max(-90, min(90, y))
@@ -599,6 +611,8 @@ class GameScene(Scene):
             if self.rotation != rotation:
                 self.rotation = rotation
                 self.frustum_updated = True
+        elif self.inventory.is_inventory_open:
+            self.inventory.on_mouse_motion(x, y, dx, dy)
 
     def on_key_press(self, symbol, modifiers):
         """Event handler for the Window.on_key_press event.
@@ -614,15 +628,17 @@ class GameScene(Scene):
             Number representing any modifying keys that were pressed.
 
         """
-        if symbol == key.W:
+        if symbol == key.W and not self.inventory.is_inventory_open:
             self.strafe[0] -= 1
-        elif symbol == key.S:
+        elif symbol == key.S and not self.inventory.is_inventory_open:
             self.strafe[0] += 1
-        elif symbol == key.A:
+        elif symbol == key.A and not self.inventory.is_inventory_open:
             self.strafe[1] -= 1
-        elif symbol == key.D:
+        elif symbol == key.D and not self.inventory.is_inventory_open:
             self.strafe[1] += 1
-        elif symbol == key.SPACE:
+        elif symbol == key.I:
+            self.inventory.toggle_inventory()
+        elif symbol == key.SPACE and not self.inventory.is_inventory_open:
             if self.flying:
                 # Reduces vertical flying speed
                 # 0.1 positive value that allows vertical flight up.
@@ -630,9 +646,9 @@ class GameScene(Scene):
             elif self.dy == 0:
                 self.dy = JUMP_SPEED
                 self.audio.play(self.jump_sfx)
-        elif symbol == key.LCTRL:
+        elif symbol == key.LCTRL and not self.inventory.is_inventory_open:
             self.running = True
-        elif symbol == key.LSHIFT:
+        elif symbol == key.LSHIFT and not self.inventory.is_inventory_open:
             if self.flying:
                 # Reduces vertical flying speed
                 # -0.1 negative value that allows vertical flight down.
@@ -653,12 +669,19 @@ class GameScene(Scene):
         elif symbol == key.F5:
             self.scene_manager.save.save_world(self.model)
         elif symbol == key.F12:
-            pyglet.image.get_buffer_manager().get_color_buffer().save('screenshot.png')
+            self._takeScreenshot()
         elif symbol in self.num_keys:
-            index = (symbol - self.num_keys[0]) % len(self.inventory)
-            self.block = self.inventory[index]
+            self.inventory.select_block(symbol - self.num_keys[0])
         elif symbol == key.ENTER:
             self.scene_manager.change_scene('MenuScene')
+
+    def _takeScreenshot(self):
+        if not os.path.exists('screenshots/'):
+            os.mkdir("screenshots")
+        shot_number = 0
+        while os.path.exists('screenshots/screenshot - {}.png'.format(shot_number)):
+            shot_number += 1
+        pyglet.image.get_buffer_manager().get_color_buffer().save('screenshots/screenshot - {}.png'.format(shot_number))
 
     def on_key_release(self, symbol, modifiers):
         """Event handler for the Window.on_key_release event.
@@ -691,12 +714,20 @@ class GameScene(Scene):
         elif symbol == key.P:
             breakpoint()
 
+    def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
+        if self.inventory.is_inventory_open:
+            self.inventory.on_mouse_drag(x, y, dx, dy, buttons, modifiers)
+        else:
+            self.on_mouse_motion(x, y, dx ,dy)
+
     def on_resize(self, width, height):
         """Event handler for the Window.on_resize event.
 
          Called when the window is resized to a new `width` and `height`.
         """
-        # Reset the info label and reticle positions.
+
+        # Reset the info label, debug Background and reticle positions.
+        self.debug_background.y = height-INFO_LABEL_FONTSIZE - 20
         self.info_label.y = height - 10
         x, y = width // 2, height // 2
         n = 10
@@ -717,6 +748,7 @@ class GameScene(Scene):
         # Optionally draw some things
         if self.toggleGui:
             self.draw_focused_block()
+            self.inventory.draw()
             if self.toggleLabel:
                 self.draw_label()
 
@@ -749,7 +781,10 @@ class GameScene(Scene):
         elements.append("SECTORS = %d [+%d]" % (len(self.model.sectors), len(self.model.requested)))
         elements.append("BLOCKS = %d" % self.model.count_blocks())
         self.info_label.text = ' : '.join(elements)
-        self.info_label.draw()
+        # Calculating debug label width and updating its background accordingly (width/height ratio for Arial=0.52 so we multiply with 1.52)
+        self.debug_background.width =  int(len(self.info_label.text)*INFO_LABEL_FONTSIZE/1.52)
+
+        self.debug_batch.draw()
 
 
 class HelpScene(Scene):

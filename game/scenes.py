@@ -275,7 +275,10 @@ class GameScene(Scene):
                                             x=10, y=self.window.height - 10, anchor_x='left',
                                             anchor_y='top', color=(255, 255, 255, 255), batch=self.debug_batch, group=self.hud_group)
 
-        self.debug_background = Rectangle(0, self.window.height-INFO_LABEL_FONTSIZE - 20, 0, INFO_LABEL_FONTSIZE + 20, color=(45, 45, 45), batch=self.debug_batch, group=self.hud_background_group) 
+        self.debug_background = Rectangle(0,
+                self.window.height-INFO_LABEL_FONTSIZE - 20, 0,
+                INFO_LABEL_FONTSIZE + 20, color=(45, 45, 45),
+                batch=self.debug_batch, group=self.hud_background_group)
         self.debug_background.opacity = 150
 
         # Boolean whether to display loading screen.
@@ -778,6 +781,8 @@ class GameScene(Scene):
         elements.append("SECTORS = %d [+%d]" % (len(self.model.sectors), len(self.model.requested)))
         elements.append("BLOCKS = %d" % self.model.count_blocks())
         self.info_label.text = ' : '.join(elements)
+        # Calculating debug label width and updating its background accordingly (width/height ratio for Arial=0.52 so we multiply with 1.52)
+        self.debug_background.width =  int(len(self.info_label.text)*INFO_LABEL_FONTSIZE/1.52)
 
         self.debug_batch.draw()
 

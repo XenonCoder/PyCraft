@@ -577,7 +577,7 @@ class GameScene(Scene):
                 if button == mouse.RIGHT or (button == mouse.LEFT and modifiers & key.MOD_CTRL):
                     # ON OSX, control + left click = right click.
                     if previous:
-                        self.model.add_block(previous, self.block)
+                        self.model.add_block(previous, self.inventory.get_selected_block())
                 elif button == pyglet.window.mouse.LEFT and block:
                     texture = self.model.get_block(block)
                     if texture != BEDSTONE:

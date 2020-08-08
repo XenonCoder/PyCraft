@@ -75,11 +75,13 @@ class Block:
 
     def get_block_image(self):
         block_image = pyglet.resource.image('textures.png')
+        width = block_image.width - 16
+        height = block_image.height - 16
         block_image = block_image.get_region(
-            self.numeric_tex_coords[2][0]*16,self.numeric_tex_coords[2][1]*16, 16, 16)
+            self.numeric_tex_coords[2][0]*16, height - self.numeric_tex_coords[2][1]*16, 16, 16)
         return block_image
 
-DIRT = Block('dirt', (0, 2), (0, 2), (0, 2))
+DIRT = Block('dirt', ((0, 2), (0, 2), (0, 2)))
 DIRT_WITH_GRASS = Block('dirt_with_grass', ((1, 3), (0, 2), (0, 3)))
 SAND = Block('sand', ((1, 2), (1, 2), (1, 2)))
 COBBLESTONE = Block('cobblestone', ((2, 3), (2, 3), (2, 3)))
